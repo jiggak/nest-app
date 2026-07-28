@@ -19,7 +19,7 @@
 use std::{fs, path::{Path, PathBuf}, time::Duration};
 
 use anyhow::Result;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 mod config_de;
 mod schedule_config;
@@ -38,7 +38,7 @@ use crate::{env, state::HvacMode};
 ///
 /// All config options have a default; you only need to include options
 /// you would like to override in your configuration file.
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(default)]
 pub struct Config {
     /// The temperature difference from the setpoint required to trigger an action.
@@ -60,13 +60,13 @@ pub struct Config {
     /// Minimum off time for cooling to allow AC refrigerant pressures to equalize.
     ///
     /// Defaults to "5m"
-    #[serde(deserialize_with = "config_de::duration")]
+    #[serde(with = "config_de::duration")]
     pub min_off_time: Duration,
 
     /// Default amount of time to run fan, when fan mode is activated.
     ///
     /// Defaults to "15m"
-    #[serde(deserialize_with = "config_de::duration")]
+    #[serde(with = "config_de::duration")]
     pub default_fan_timeout: Duration,
 
     /// Directory to store app state.
@@ -135,7 +135,7 @@ impl Default for Config {
 /// friendly_name = "Hallway"
 /// encryption_key = "..."
 /// ```
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(default)]
 pub struct HomeAssistantConfig {
     /// Object ID used internall by home assistant.
@@ -243,14 +243,14 @@ impl Default for HomeAssistantConfig {
 /// brightness = 108
 /// timeout = "15s"
 /// ```
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(default)]
 pub struct BacklightConfig {
     /// Screen brightness, defaults to 108 (max 120)
     pub brightness: u32,
 
     /// Timeout before screen turns off, defaults to "15s"
-    #[serde(deserialize_with = "config_de::duration")]
+    #[serde(with = "config_de::duration")]
     pub timeout: Duration
 }
 
@@ -272,7 +272,7 @@ impl Default for BacklightConfig {
 /// temp_cool = 20.0
 /// timeout = "0s"
 /// ```
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(default)]
 pub struct AwayConfig {
     /// Away temp for heating mode, default 16.0
@@ -283,7 +283,7 @@ pub struct AwayConfig {
 
     /// Duration of no proximity movement before going into away mode,
     /// or set to zero to disable away mode. Default "30m".
-    #[serde(deserialize_with = "config_de::duration")]
+    #[serde(with = "config_de::duration")]
     pub timeout: Duration
 }
 
@@ -305,7 +305,7 @@ impl Default for AwayConfig {
 /// serial_port = "/dev/ttyO2"
 /// wiring = { heat_wire: "W1", cool_wire: "Y1" }
 /// ```
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(default)]
 pub struct BackplateConfig {
     /// Minimum near proximity value to be considered as movement, default 15
@@ -333,12 +333,12 @@ impl Default for BackplateConfig {
     }
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum WireId {
     W1, Y1, G, OB, W2, Y2, Star
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "type")]
 pub enum WireConfig {
     HeatAndCool {

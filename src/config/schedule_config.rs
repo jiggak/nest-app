@@ -17,7 +17,7 @@
  */
 
 use chrono::{NaiveTime, Weekday};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use super::config_de;
 
@@ -52,7 +52,7 @@ use super::config_de;
 ///    { time = "09:00", temp = 16.0 }
 /// ]
 /// ```
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ScheduleConfig {
     /// Days of the week.
     ///
@@ -67,7 +67,7 @@ pub struct ScheduleConfig {
     pub set_points: Vec<SetPoint>
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(untagged)]
 pub enum DaysOfWeek {
     Range(WeekDayRange),
@@ -97,14 +97,14 @@ impl DaysOfWeek {
     }
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum WeekDayRange {
     EveryDay,
     WeekDays,
     WeekEnd
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum WeekDay {
     Mon,
     Tue,
@@ -129,9 +129,9 @@ impl WeekDay {
     }
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SetPoint {
-    #[serde(deserialize_with = "config_de::time_of_day")]
+    #[serde(with = "config_de::time_of_day")]
     pub time: NaiveTime,
     pub temp: f32
 }
