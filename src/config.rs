@@ -28,6 +28,32 @@ pub use schedule_config::*;
 
 use crate::{env, state::HvacMode};
 
+mod is_default {
+    use super::*;
+
+    macro_rules! is_field_default {
+        ($struct:ty, $field:ident : $ty:ty) => {
+            pub fn $field(value: &$ty) -> bool {
+                *value == <$struct>::default().$field
+            }
+        };
+    }
+
+    is_field_default!(Config, temp_deadband: f32);
+    is_field_default!(Config, temp_overrun: f32);
+    is_field_default!(Config, min_off_time: Duration);
+    is_field_default!(Config, default_fan_timeout: Duration);
+    is_field_default!(Config, storage_dir: PathBuf);
+    is_field_default!(Config, away_mode: AwayConfig);
+    is_field_default!(Config, backplate: BackplateConfig);
+    is_field_default!(Config, home_assistant: HomeAssistantConfig);
+    is_field_default!(Config, backlight: BacklightConfig);
+
+    is_field_default!(BackplateConfig, near_pir_threshold: u16);
+    is_field_default!(BackplateConfig, serial_port: String);
+    is_field_default!(BackplateConfig, wiring: WireConfig);
+}
+
 /// Config file
 ///
 /// Launch retherm with the path to your custom configuration.
@@ -47,6 +73,7 @@ pub struct Config {
     /// the hvac system will turn heat on when temp drops to 19.6.
     ///
     /// Defaults to 0.6
+    #[serde(skip_serializing_if = "is_default::temp_deadband")]
     pub temp_deadband: f32,
 
     /// The temperature difference past the setpoint required to stop an action.
@@ -55,31 +82,46 @@ pub struct Config {
     /// the hvac system will turn heat off when temp reaches 20.2.
     ///
     /// Defaults to 0.4
+    #[serde(skip_serializing_if = "is_default::temp_overrun")]
     pub temp_overrun: f32,
 
     /// Minimum off time for cooling to allow AC refrigerant pressures to equalize.
     ///
     /// Defaults to "5m"
     #[serde(with = "config_de::duration")]
+    #[serde(skip_serializing_if = "is_default::min_off_time")]
     pub min_off_time: Duration,
 
     /// Default amount of time to run fan, when fan mode is activated.
     ///
     /// Defaults to "15m"
     #[serde(with = "config_de::duration")]
+    #[serde(skip_serializing_if = "is_default::default_fan_timeout")]
     pub default_fan_timeout: Duration,
 
     /// Directory to store app state.
     ///
     /// Defaults to "/media/data"
+    #[serde(skip_serializing_if = "is_default::storage_dir")]
     pub storage_dir: PathBuf,
 
+    #[serde(skip_serializing_if = "is_default::away_mode")]
     pub away_mode: AwayConfig,
+
+    #[serde(skip_serializing_if = "is_default::backplate")]
     pub backplate: BackplateConfig,
+
+    #[serde(skip_serializing_if = "is_default::home_assistant")]
     pub home_assistant: HomeAssistantConfig,
+
+    #[serde(skip_serializing_if = "is_default::backlight")]
     pub backlight: BacklightConfig,
+
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub schedule_heat: Vec<ScheduleConfig>,
-    pub schedule_cool: Vec<ScheduleConfig>
+
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub schedule_cool: Vec<ScheduleConfig>,
 }
 
 impl Config {
@@ -135,7 +177,7 @@ impl Default for Config {
 /// friendly_name = "Hallway"
 /// encryption_key = "..."
 /// ```
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(default)]
 pub struct HomeAssistantConfig {
     /// Object ID used internall by home assistant.
@@ -243,7 +285,7 @@ impl Default for HomeAssistantConfig {
 /// brightness = 108
 /// timeout = "15s"
 /// ```
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(default)]
 pub struct BacklightConfig {
     /// Screen brightness, defaults to 108 (max 120)
@@ -272,7 +314,7 @@ impl Default for BacklightConfig {
 /// temp_cool = 20.0
 /// timeout = "0s"
 /// ```
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 #[serde(default)]
 pub struct AwayConfig {
     /// Away temp for heating mode, default 16.0
@@ -305,17 +347,20 @@ impl Default for AwayConfig {
 /// serial_port = "/dev/ttyO2"
 /// wiring = { heat_wire: "W1", cool_wire: "Y1" }
 /// ```
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(default)]
 pub struct BackplateConfig {
     /// Minimum near proximity value to be considered as movement, default 15
+    #[serde(skip_serializing_if = "is_default::near_pir_threshold")]
     pub near_pir_threshold: u16,
 
     /// Path to backplate serial device file, default "/dev/ttyO2"
+    #[serde(skip_serializing_if = "is_default::serial_port")]
     pub serial_port: String,
 
     /// HVAC wiring configuration, default `{ heat_wire: "W1", cool_wire: "Y1" }`.
     /// Valid wire names: W1, Y1, G, OB, W2, Y2, Star.
+    #[serde(skip_serializing_if = "is_default::wiring")]
     pub wiring: WireConfig
 }
 
@@ -333,17 +378,30 @@ impl Default for BackplateConfig {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum WireId {
     W1, Y1, G, OB, W2, Y2, Star
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(tag = "type")]
 pub enum WireConfig {
     HeatAndCool {
         heat_wire: WireId,
         cool_wire: WireId,
         fan_wire: WireId,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ser_skip_defaults() {
+        let mut config = Config::default();
+        config.temp_deadband = 1.0;
+        let s = toml::to_string(&config).unwrap();
+        assert_eq!(s, "temp_deadband = 1.0\n");
     }
 }
