@@ -28,10 +28,12 @@ use esphome_api::{
 };
 
 use crate::{
-    config::HomeAssistantConfig,
     events::{Event, EventHandler, EventSender},
     state::ThermostatState
 };
+
+mod home_assistant_options;
+pub use home_assistant_options::HomeAssistantOptions;
 
 pub struct HomeAssistant {
     message_sender: MessageSender
@@ -46,29 +48,29 @@ impl HomeAssistant {
 
     pub fn start_listener<S>(
         &self,
-        config: &HomeAssistantConfig,
+        options: &HomeAssistantOptions,
         stream_provider: impl MessageStreamProvider<S> + Send + 'static,
         event_sender: impl EventSender + Send + 'static
     )
         where S: MessageStream + Send + 'static
     {
-        let addr = config.listen_addr.clone();
+        let addr = options.listen_addr.clone();
 
         let connection_observer = self.message_sender.clone();
 
         let delegate = HvacRequestHandler::new(
-            thermostat_entity(config.get_object_id()),
+            thermostat_entity(options.get_object_id()),
             event_sender
         );
 
         let handler = DefaultHandler {
             delegate: delegate,
-            server_info: config.server_info.clone(),
-            node_name: config.get_node_name(),
-            friendly_name: config.friendly_name.clone(),
-            manufacturer: config.manufacturer.clone(),
-            model: config.model.clone(),
-            mac_address: config.get_mac_address()
+            server_info: options.server_info.clone(),
+            node_name: options.get_node_name(),
+            friendly_name: options.friendly_name.clone(),
+            manufacturer: options.manufacturer.clone(),
+            model: options.model.clone(),
+            mac_address: options.get_mac_address()
         };
 
         thread::spawn(move || {

@@ -53,11 +53,7 @@ fn main() -> Result<()> {
 
     install_panic_logging();
 
-    let config = if let Some(file_path) = cli.config {
-        config::Config::load(file_path)?
-    } else {
-        config::Config::default()
-    };
+    let storage_dir = cli.config_dir.unwrap_or(".retherm".to_string());
 
     let theme = if let Some(file_path) = cli.theme {
         theme::Theme::load(file_path)?
@@ -67,8 +63,10 @@ fn main() -> Result<()> {
 
     let mut event_source = window::new_event_source()?;
 
-    let mut storage = storage::Storage::new(&config)?;
+    let mut storage = storage::Storage::new(storage_dir)?;
     let state = storage.read_state()?;
+    let config = storage.read_config()?;
+    let climate_stettings = storage.read_climate_settings()?;
 
     let mut state_manager = state::StateManager::new(
         &config,
@@ -79,7 +77,7 @@ fn main() -> Result<()> {
     let mut schedule = schedule::ScheduleManager::new(&config, event_source.event_sender());
     schedule.start_schedule(&state.mode);
 
-    let mut backplate = backplate::Backplate::new(&config, event_source.event_sender())?;
+    let mut backplate = backplate::Backplate::new(&config.backplate, event_source.event_sender())?;
     let mut timers = timer::Timers::new(event_source.event_sender());
     let mut sound = sound::Sound::new()?;
 

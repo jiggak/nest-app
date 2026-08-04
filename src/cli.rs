@@ -27,8 +27,8 @@ pub struct Cli {
     pub syslog: Option<LevelFilter>,
 
     #[argh(option)]
-    /// path to config file
-    pub config: Option<String>,
+    /// path to config directory
+    pub config_dir: Option<String>,
 
     #[argh(option)]
     /// path to theme file

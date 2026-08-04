@@ -18,6 +18,16 @@
 
 use serde::{Deserializer, Serializer, de::{self, Visitor}};
 
+macro_rules! is_field_default {
+    ($struct:ty, $field:ident : $ty:ty) => {
+        pub fn $field(value: &$ty) -> bool {
+            *value == <$struct>::default().$field
+        }
+    };
+}
+
+pub(crate) use is_field_default;
+
 pub mod duration {
     use super::*;
     use std::time::Duration;

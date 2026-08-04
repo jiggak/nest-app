@@ -26,9 +26,11 @@ use crate::{
 };
 
 mod schedule_model;
+mod schedule_options;
 mod schedule_thread;
 
 use schedule_model::Schedule;
+pub use schedule_options::*;
 use schedule_thread::ScheduleThread;
 
 pub struct ScheduleManager<S> {

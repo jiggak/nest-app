@@ -21,23 +21,24 @@ use std::{fs, path::{Path, PathBuf}, time::Duration};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-mod config_de;
+use crate::{
+    backplate::BackplateOptions,
+    home_assistant::HomeAssistantOptions,
+    schedule::ScheduleEntry,
+    state::HvacMode,
+    window::BacklightOptions
+};
+
+pub mod config_de;
+mod preset;
 mod schedule_config;
 
+pub use preset::*;
 pub use schedule_config::*;
+pub(crate) use config_de::is_field_default;
 
-use crate::{env, state::HvacMode};
-
-mod is_default {
+pub mod is_default {
     use super::*;
-
-    macro_rules! is_field_default {
-        ($struct:ty, $field:ident : $ty:ty) => {
-            pub fn $field(value: &$ty) -> bool {
-                *value == <$struct>::default().$field
-            }
-        };
-    }
 
     is_field_default!(Config, temp_deadband: f32);
     is_field_default!(Config, temp_overrun: f32);
@@ -45,13 +46,9 @@ mod is_default {
     is_field_default!(Config, default_fan_timeout: Duration);
     is_field_default!(Config, storage_dir: PathBuf);
     is_field_default!(Config, away_mode: AwayConfig);
-    is_field_default!(Config, backplate: BackplateConfig);
-    is_field_default!(Config, home_assistant: HomeAssistantConfig);
-    is_field_default!(Config, backlight: BacklightConfig);
-
-    is_field_default!(BackplateConfig, near_pir_threshold: u16);
-    is_field_default!(BackplateConfig, serial_port: String);
-    is_field_default!(BackplateConfig, wiring: WireConfig);
+    is_field_default!(Config, backplate: BackplateOptions);
+    is_field_default!(Config, home_assistant: HomeAssistantOptions);
+    is_field_default!(Config, backlight: BacklightOptions);
 }
 
 /// Config file
@@ -64,7 +61,7 @@ mod is_default {
 ///
 /// All config options have a default; you only need to include options
 /// you would like to override in your configuration file.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(default)]
 pub struct Config {
     /// The temperature difference from the setpoint required to trigger an action.
@@ -109,13 +106,13 @@ pub struct Config {
     pub away_mode: AwayConfig,
 
     #[serde(skip_serializing_if = "is_default::backplate")]
-    pub backplate: BackplateConfig,
+    pub backplate: BackplateOptions,
 
     #[serde(skip_serializing_if = "is_default::home_assistant")]
-    pub home_assistant: HomeAssistantConfig,
+    pub home_assistant: HomeAssistantOptions,
 
     #[serde(skip_serializing_if = "is_default::backlight")]
-    pub backlight: BacklightConfig,
+    pub backlight: BacklightOptions,
 
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub schedule_heat: Vec<ScheduleConfig>,
@@ -156,9 +153,9 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             away_mode: AwayConfig::default(),
-            backplate: BackplateConfig::default(),
-            home_assistant: HomeAssistantConfig::default(),
-            backlight: BacklightConfig::default(),
+            backplate: BackplateOptions::default(),
+            home_assistant: HomeAssistantOptions::default(),
+            backlight: BacklightOptions::default(),
             schedule_heat: Vec::new(),
             schedule_cool: Vec::new(),
             temp_deadband: 0.6,
@@ -169,142 +166,6 @@ impl Default for Config {
         }
     }
 }
-
-/// Home Assistant
-///
-/// ```toml
-/// [home_assistant]
-/// friendly_name = "Hallway"
-/// encryption_key = "..."
-/// ```
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-#[serde(default)]
-pub struct HomeAssistantConfig {
-    /// Object ID used internall by home assistant.
-    /// Defaults to "climage.{node_name}".
-    pub object_id: Option<String>,
-
-    /// Listen address for ESP Home API server, default "0.0.0.0:6053"
-    pub listen_addr: String,
-
-    /// Encryption key as 32 byte base64 string. When not provided, the
-    /// connection uses plaintext messages.
-    /// See [ESP Home Native API](https://esphome.io/components/api/)
-    /// for a tool that generates a random key.
-    pub encryption_key: Option<String>,
-
-    /// Server info (not typically displayed in Home Assistant).
-    /// Defaults to "ReTherm {version}".
-    pub server_info: String,
-
-    /// Node name, defaults to the system hostname
-    pub node_name: Option<String>,
-
-    /// Friendly name displayed in as label for thermostat control
-    pub friendly_name: String,
-
-    /// Manufactuer name, defaults to "Nest"
-    pub manufacturer: String,
-
-    /// Model name, defaults to "Gen2 Thermostat"
-    pub model: String,
-
-    /// Mac address, defaults to address of system interface address
-    pub mac_address: Option<String>
-}
-
-impl HomeAssistantConfig {
-    pub fn get_object_id(&self) -> String {
-        if let Some(object_id) = &self.object_id {
-            object_id.clone()
-        } else {
-            format!("climate.{}", self.get_node_name())
-        }
-    }
-
-    pub fn get_node_name(&self) -> String {
-        let pkg_name = env::get_pkg_name();
-
-        if let Some(node_name) = &self.node_name {
-            node_name.clone()
-        } else {
-            match env::get_hostname() {
-                Ok(hostname) => hostname,
-                Err(e) => {
-                    log::error!("get_hostname: '{e}'; using '{pkg_name}'");
-                    pkg_name.into()
-                }
-            }
-        }
-    }
-
-    pub fn get_mac_address(&self) -> String {
-        const FAKE_MAC: &str = "01:02:03:04:05:06";
-
-        if let Some(mac_addr) = &self.mac_address {
-            mac_addr.clone()
-        } else {
-            match env::get_mac_addr() {
-                Ok(mac_addr) => {
-                    if let Some(mac_addr) = mac_addr {
-                        mac_addr
-                    } else {
-                        log::warn!("get_mac_addr None; using '{FAKE_MAC}'");
-                        FAKE_MAC.into()
-                    }
-                }
-                Err(e) => {
-                    log::error!("get_mac_addr: '{e}'; using '{FAKE_MAC}'");
-                    FAKE_MAC.into()
-                }
-            }
-        }
-    }
-}
-
-impl Default for HomeAssistantConfig {
-    fn default() -> Self {
-        Self {
-            object_id: None,
-            listen_addr: "0.0.0.0:6053".to_string(),
-            encryption_key: None,
-            server_info: format!("ReTherm {}", env::get_pkg_ver()),
-            node_name: None,
-            friendly_name: "ReTherm Thermostat".to_string(),
-            manufacturer: "Nest".to_string(),
-            model: "Gen2 Thermostat".to_string(),
-            mac_address: None
-        }
-    }
-}
-
-/// Backlight
-///
-/// ```toml
-/// [backlight]
-/// brightness = 108
-/// timeout = "15s"
-/// ```
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-#[serde(default)]
-pub struct BacklightConfig {
-    /// Screen brightness, defaults to 108 (max 120)
-    pub brightness: u32,
-
-    /// Timeout before screen turns off, defaults to "15s"
-    #[serde(with = "config_de::duration")]
-    pub timeout: Duration
-}
-
-impl Default for BacklightConfig {
-    fn default() -> Self {
-        Self {
-            brightness: 108,
-            timeout: Duration::from_secs(15)
-        }
-    }
-}
-
 
 /// Away Mode
 ///
@@ -339,57 +200,26 @@ impl Default for AwayConfig {
     }
 }
 
-/// Backplate
-///
-/// ```toml
-/// [backplate]
-/// near_pir_threshold = 15
-/// serial_port = "/dev/ttyO2"
-/// wiring = { heat_wire: "W1", cool_wire: "Y1" }
-/// ```
+// ClimateOptions, ClimateProgram, Program, Policy, Profile
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-#[serde(default)]
-pub struct BackplateConfig {
-    /// Minimum near proximity value to be considered as movement, default 15
-    #[serde(skip_serializing_if = "is_default::near_pir_threshold")]
-    pub near_pir_threshold: u16,
-
-    /// Path to backplate serial device file, default "/dev/ttyO2"
-    #[serde(skip_serializing_if = "is_default::serial_port")]
-    pub serial_port: String,
-
-    /// HVAC wiring configuration, default `{ heat_wire: "W1", cool_wire: "Y1" }`.
-    /// Valid wire names: W1, Y1, G, OB, W2, Y2, Star.
-    #[serde(skip_serializing_if = "is_default::wiring")]
-    pub wiring: WireConfig
+pub struct ClimateSettings {
+    pub away: AwayMode,
+    pub presets: Vec<Preset>,
+    pub schedule: Vec<ScheduleEntry>,
 }
 
-impl Default for BackplateConfig {
+impl Default for ClimateSettings {
     fn default() -> Self {
         Self {
-            near_pir_threshold: 15,
-            serial_port: String::from("/dev/ttyO2"),
-            wiring: WireConfig::HeatAndCool {
-                heat_wire: WireId::W1,
-                cool_wire: WireId::Y1,
-                fan_wire: WireId::G,
-            }
+            away: AwayMode::default(),
+            presets: vec![
+                Preset {
+                    name: PresetName::Away,
+                    temp: PresetTemp::Both { heat: 16.0, cool: 24.0 },
+                }
+            ],
+            schedule: vec![],
         }
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub enum WireId {
-    W1, Y1, G, OB, W2, Y2, Star
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-#[serde(tag = "type")]
-pub enum WireConfig {
-    HeatAndCool {
-        heat_wire: WireId,
-        cool_wire: WireId,
-        fan_wire: WireId,
     }
 }
 

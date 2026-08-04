@@ -18,7 +18,8 @@
 
 use anyhow::Result;
 
-use crate::config::BacklightConfig;
+mod backlight_options;
+pub use backlight_options::BacklightOptions;
 
 #[cfg(feature = "device")]
 mod backlight;
@@ -26,8 +27,8 @@ mod backlight;
 mod window_linuxfb;
 
 #[cfg(feature = "device")]
-pub fn new_window(config: &BacklightConfig) -> Result<window_linuxfb::FramebufferWindow> {
-    window_linuxfb::FramebufferWindow::new(config)
+pub fn new_window(options: &BacklightOptions) -> Result<window_linuxfb::FramebufferWindow> {
+    window_linuxfb::FramebufferWindow::new(options)
 }
 
 #[cfg(feature = "device")]
@@ -39,7 +40,7 @@ pub fn new_event_source() -> Result<crate::events::DefaultEventSource> {
 mod window_sdl;
 
 #[cfg(feature = "simulate")]
-pub fn new_window(_config: &BacklightConfig) -> Result<window_sdl::SdlWindow> {
+pub fn new_window(_options: &BacklightOptions) -> Result<window_sdl::SdlWindow> {
     window_sdl::SdlWindow::new()
 }
 

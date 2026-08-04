@@ -26,12 +26,8 @@ use anyhow::Result;
 use log::{debug, error, info, warn};
 use nest_backplate::{BackplateCmd, BackplateConnection, BackplateResponse, Wire};
 
-use crate::{
-    config::{BackplateConfig, Config, WireConfig, WireId},
-    events::{Event, EventSender},
-    state::HvacAction
-};
-use super::{BackplateDevice};
+use crate::{events::{Event, EventSender}, state::HvacAction};
+use super::{BackplateDevice, BackplateOptions, WireConfig, WireId};
 
 pub struct DeviceBackplateThread {
     cmd_sender: Sender<BackplateCmd>,
@@ -42,14 +38,14 @@ impl DeviceBackplateThread {
     const RECONNECT_TIMEOUT: Duration = Duration::from_secs(1);
     const KEEPALIVE_PERIOD: Duration = Duration::from_mins(15);
 
-    pub fn start<S>(config: BackplateConfig, event_sender: S) -> Result<Self>
+    pub fn start<S>(options: BackplateOptions, event_sender: S) -> Result<Self>
         where S: EventSender + Send + 'static
     {
         let (cmd_sender, cmd_receiver) = channel();
-        let serial_port = config.serial_port.clone();
-        let near_pir_threshold = config.near_pir_threshold;
+        let serial_port = options.serial_port.clone();
+        let near_pir_threshold = options.near_pir_threshold;
 
-        let wire_state = match config.wiring {
+        let wire_state = match options.wiring {
             WireConfig::HeatAndCool { heat_wire, cool_wire, fan_wire } => {
                 SwitchState::new(heat_wire.into(), cool_wire.into(), fan_wire.into())
             }
@@ -177,11 +173,11 @@ fn backplate_main_loop<S: EventSender>(
 }
 
 impl BackplateDevice for DeviceBackplateThread {
-    fn new<S>(config: &Config, event_sender: S) -> Result<Self>
+    fn new<S>(options: &BackplateOptions, event_sender: S) -> Result<Self>
         where S: EventSender + Send + 'static, Self: Sized
     {
         DeviceBackplateThread::start(
-            config.backplate.clone(),
+            options.clone(),
             event_sender
         )
     }

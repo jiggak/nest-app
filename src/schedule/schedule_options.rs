@@ -19,7 +19,7 @@
 use chrono::{NaiveTime, Weekday};
 use serde::{Deserialize, Serialize};
 
-use super::config_de;
+use crate::config::{config_de, PresetName};
 
 /// Schedule
 ///
@@ -53,7 +53,7 @@ use super::config_de;
 /// ]
 /// ```
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub struct ScheduleConfig {
+pub struct ScheduleEntry {
     /// Days of the week.
     ///
     /// One of "EveryDay", "WeekDays", "WeekEnd"
@@ -133,5 +133,5 @@ impl WeekDay {
 pub struct SetPoint {
     #[serde(with = "config_de::time_of_day")]
     pub time: NaiveTime,
-    pub temp: f32
+    pub preset: PresetName
 }

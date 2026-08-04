@@ -22,12 +22,11 @@ use embedded_graphics_framebuf::FrameBuf;
 use linuxfb::Framebuffer;
 
 use crate::{
-    config::BacklightConfig,
     drawable::AppDrawable,
     events::{Event, EventHandler},
     timer::TimerId
 };
-use super::backlight::Backlight;
+use super::{backlight::Backlight, backlight_options::BacklightOptions};
 
 pub struct FramebufferWindow {
     fb_dev: Framebuffer,
@@ -36,7 +35,7 @@ pub struct FramebufferWindow {
 }
 
 impl FramebufferWindow {
-    pub fn new(config: &BacklightConfig) -> Result<Self> {
+    pub fn new(options: &BacklightOptions) -> Result<Self> {
         let mut fb_dev = Framebuffer::new("/dev/fb0")
             .or(Err(anyhow!("Error opening fb0")))?;
 
@@ -55,7 +54,7 @@ impl FramebufferWindow {
         let data = [Bgr888::WHITE; 320 * 320];
         let buffer = FrameBuf::new(data, width, height);
 
-        let backlight = Backlight::load("/sys/class/backlight/3-0036", config.brightness)?;
+        let backlight = Backlight::load("/sys/class/backlight/3-0036", options.brightness)?;
 
         Ok(Self { fb_dev, buffer, backlight })
     }
