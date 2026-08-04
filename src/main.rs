@@ -75,8 +75,8 @@ fn main() -> Result<()> {
         event_source.event_sender()
     )?;
 
-    let mut schedule = schedule::ScheduleManager::new(&config, event_source.event_sender());
-    schedule.start_schedule(&state.mode);
+    let mut schedule = schedule::ScheduleManager::new(event_source.event_sender());
+    schedule.start_schedule(&climate_stettings.schedule);
 
     let mut backplate = backplate::Backplate::new(&config.backplate, event_source.event_sender())?;
     let mut timers = timer::Timers::new(event_source.event_sender());

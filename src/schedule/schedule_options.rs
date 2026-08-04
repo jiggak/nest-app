@@ -19,7 +19,7 @@
 use chrono::{NaiveTime, Weekday};
 use serde::{Deserialize, Serialize};
 
-use crate::config::{config_de, PresetName};
+use crate::{config::config_de, state::PresetName};
 
 /// Schedule
 ///

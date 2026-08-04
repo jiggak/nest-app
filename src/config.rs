@@ -24,16 +24,14 @@ use crate::{
     backplate::BackplateOptions,
     home_assistant::HomeAssistantOptions,
     schedule::ScheduleEntry,
-    state::HvacMode,
+    state::{HvacMode, PresetName},
     window::BacklightOptions
 };
 
 pub mod config_de;
 mod preset;
-mod schedule_config;
 
 pub use preset::*;
-pub use schedule_config::*;
 pub(crate) use config_de::is_field_default;
 
 pub mod is_default {
@@ -108,34 +106,6 @@ pub struct Config {
 
     #[serde(skip_serializing_if = "is_default::backlight")]
     pub backlight: BacklightOptions,
-
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub schedule_heat: Vec<ScheduleConfig>,
-
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub schedule_cool: Vec<ScheduleConfig>,
-}
-
-impl Config {
-    pub fn schedule_for_mode(&self, mode: &HvacMode) -> Option<&[ScheduleConfig]> {
-        match mode {
-            HvacMode::Heat => {
-                if self.schedule_heat.len() > 0 {
-                    Some(&self.schedule_heat)
-                } else {
-                    None
-                }
-            }
-            HvacMode::Cool => {
-                if self.schedule_cool.len() > 0 {
-                    Some(&self.schedule_cool)
-                } else {
-                    None
-                }
-            }
-            _ => None
-        }
-    }
 }
 
 impl Default for Config {
@@ -144,8 +114,6 @@ impl Default for Config {
             backplate: BackplateOptions::default(),
             home_assistant: HomeAssistantOptions::default(),
             backlight: BacklightOptions::default(),
-            schedule_heat: Vec::new(),
-            schedule_cool: Vec::new(),
             temp_deadband: 0.6,
             temp_overrun: 0.4,
             min_off_time: Duration::from_mins(5),
@@ -179,10 +147,6 @@ impl Default for ClimateSettings {
 }
 
 impl ClimateSettings {
-    pub fn get_away_temp(&self, mode: &HvacMode) -> Option<f32> {
-        self.get_preset_temp(&self.away.preset, mode)
-    }
-
     pub fn get_preset_temp(&self, preset: &PresetName, mode: &HvacMode) -> Option<f32> {
         let preset = self.presets.iter()
             .find(|p| &p.name == preset);

@@ -26,7 +26,11 @@ use sdl2::{
     keyboard::Keycode, pixels::PixelFormatEnum, render::Canvas, video::Window
 };
 
-use crate::{drawable::AppDrawable, events::{Event, EventHandler, EventSender, EventSource}};
+use crate::{
+    drawable::AppDrawable,
+    events::{Event, EventHandler, EventSender, EventSource},
+    state::PresetName
+};
 
 pub struct SdlWindow {
     window_canvas: Canvas<Window>,
@@ -162,7 +166,7 @@ fn map_sdl_event(event: SdlEvent) -> Option<Event> {
         SdlEvent::KeyDown { keycode, .. } if keycode == Some(Keycode::P) =>
             Some(Event::ProximityNear),
         SdlEvent::KeyDown { keycode, .. } if keycode == Some(Keycode::A) =>
-            Some(Event::SetAway(true)),
+            Some(Event::SetPreset(Some(PresetName::Away))),
         sdl_event => {
             if sdl_event.is_user_event() {
                 Some(sdl_event.as_user_event_type::<Event>().unwrap())

@@ -78,7 +78,7 @@ impl<S: EventSender> EventHandler for MainScreen<S> {
         // Let state manager exit away mode before handling inputs.
 
         match event {
-            Event::Dial(dir) if !self.state.away => {
+            Event::Dial(dir) if !self.state.is_away() => {
                 if self.state.mode == HvacMode::Fan {
                     let sec_inc = *dir as f32 * 0.5;
                     self.set_fan_timeout(sec_inc)?;
@@ -87,7 +87,7 @@ impl<S: EventSender> EventHandler for MainScreen<S> {
                     self.set_target_temp(temp_inc)?;
                 }
             }
-            Event::ButtonDown if !self.state.away => {
+            Event::ButtonDown if !self.state.is_away() => {
                 self.event_sender.send_event(Event::NavigateTo(ScreenId::ModeSelect {
                     current_mode: self.state.mode
                 }))?;
@@ -205,7 +205,7 @@ impl<S: EventSender> AppDrawable for MainScreen<S> {
                 bg_colour,
                 Some(self.theme.disconnect_icon.colour)
             )?;
-        } else if self.state.away {
+        } else if self.state.is_away() {
             self.away_icon.draw(
                 target,
                 self.theme.status_icon_center,

@@ -36,26 +36,24 @@ use schedule_thread::ScheduleThread;
 pub struct ScheduleManager<S> {
     event_sender: S,
     schedule_thread: Option<ScheduleThread>,
-    config: Config
 }
 
 impl<S: EventSender + Clone + Send + 'static> ScheduleManager<S> {
-    pub fn new(config: &Config, event_sender: S) -> Self {
+    pub fn new(event_sender: S) -> Self {
         Self {
             event_sender,
             schedule_thread: None,
-            config: config.clone()
         }
     }
 
-    pub fn start_schedule(&mut self, mode: &HvacMode) {
+    pub fn start_schedule(&mut self, schedule: &[ScheduleEntry]) {
         if let Some(thread) = self.schedule_thread.take() {
             info!("Stop schedule clock thread");
             thread.stop()
                 .expect("Schedule thread should stop");
         }
 
-        if let Some(schedule) = self.config.schedule_for_mode(mode) {
+        if schedule.len() > 0 {
             let schedule = Schedule::new(schedule);
             info!("Start schedule clock thread {:?}", schedule);
             let thread = ScheduleThread::start(schedule, self.event_sender.clone());
@@ -68,9 +66,10 @@ impl<S: EventSender + Clone + Send + 'static> ScheduleManager<S> {
 
 impl<S: EventSender + Clone + Send + 'static> EventHandler for ScheduleManager<S> {
     fn handle_event(&mut self, event: &Event) -> Result<()> {
-        if let Event::SetMode(mode) = event {
-            self.start_schedule(mode);
-        }
+        // TODO reload schedule when climate settings changed
+        // if let Event::SetMode(mode) = event {
+        //     self.start_schedule(mode);
+        // }
         Ok(())
     }
 }

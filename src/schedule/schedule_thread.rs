@@ -42,8 +42,8 @@ impl ScheduleThread {
 
         thread::spawn(move || {
             loop {
-                if let Some(temp) = schedule.get_target_temp(Local::now()) {
-                    event_sender.send_event(Event::SetTargetTemp(temp))
+                if let Some(preset) = schedule.get_preset(Local::now()) {
+                    event_sender.send_event(Event::SetPreset(Some(preset)))
                         .expect("Schedule event sender should send");
                 }
 

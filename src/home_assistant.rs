@@ -150,14 +150,11 @@ impl<S: EventSender> RequestHandler for HvacRequestHandler<S> {
                     self.event_sender.send_event(Event::SetTargetTemp(temp))?;
                 }
                 if cmd.has_preset {
-                    match cmd.preset() {
-                        ClimatePreset::Away => {
-                            self.event_sender.send_event(Event::SetAway(true))?;
-                        }
-                        _ => {
-                            self.event_sender.send_event(Event::SetAway(false))?;
-                        }
-                    }
+                    let mode = cmd.preset().try_into()
+                        .map(|p| Some(p))
+                        .unwrap_or(None);
+
+                    self.event_sender.send_event(Event::SetPreset(mode))?;
                 }
             }
             _ => { }
@@ -184,8 +181,11 @@ fn thermostat_entity(object_id: String) -> ListEntitiesClimateResponse {
     entity.feature_flags =
         ClimateFeature::SUPPORTS_CURRENT_TEMPERATURE |
         ClimateFeature::SUPPORTS_ACTION;
+    // FIXME this should probably be dynamic based on user defined presets
     entity.supported_presets = vec![
         ClimatePreset::None as i32,
+        ClimatePreset::Home as i32,
+        ClimatePreset::Sleep as i32,
         ClimatePreset::Away as i32,
     ];
 

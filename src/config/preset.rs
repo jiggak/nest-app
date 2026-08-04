@@ -20,7 +20,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{config::config_de, state::HvacMode};
+use crate::{config::config_de, state::{HvacMode, PresetName}};
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Preset {
@@ -51,13 +51,7 @@ impl Preset {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub enum PresetName {
-    Home,
-    Sleep,
-    Away,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(untagged)]
 pub enum PresetTemp {
     Heat { heat: f32 },
     Cool { cool: f32 },

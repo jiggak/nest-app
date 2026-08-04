@@ -26,7 +26,12 @@ use anyhow::Result;
 use debounce::EventDebouncer;
 use throttle::Throttle;
 
-use crate::{screen::ScreenId, state::{HvacMode, ThermostatState}, timer::TimerId};
+use crate::{
+    state::PresetName,
+    screen::ScreenId,
+    state::{HvacMode, ThermostatState},
+    timer::TimerId
+};
 
 #[derive(Debug, Clone)]
 pub enum Event {
@@ -36,7 +41,7 @@ pub enum Event {
     SetTargetTemp(f32),
     SetCurrentTemp(f32),
     SetMode(HvacMode),
-    SetAway(bool),
+    SetPreset(Option<PresetName>),
     State(ThermostatState),
     GetState,
     NavigateTo(ScreenId),
@@ -81,7 +86,7 @@ impl PartialEq for Event {
             Self::SetTargetTemp(_) => matches!(other, Self::SetTargetTemp(_)),
             Self::SetCurrentTemp(_) => matches!(other, Self::SetCurrentTemp(_)),
             Self::SetMode(_) => matches!(other, Self::SetMode(_)),
-            Self::SetAway(_) => matches!(other, Self::SetAway(_)),
+            Self::SetPreset(_) => matches!(other, Self::SetPreset(_)),
             Self::State(_) => matches!(other, Self::State(_)),
             Self::GetState => matches!(other, Self::GetState),
             Self::NavigateTo(_) => matches!(other, Self::NavigateTo(_)),
