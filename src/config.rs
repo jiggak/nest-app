@@ -16,9 +16,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::{fs, path::{Path, PathBuf}, time::Duration};
+use std::{path::PathBuf, time::Duration};
 
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -45,7 +44,6 @@ pub mod is_default {
     is_field_default!(Config, min_off_time: Duration);
     is_field_default!(Config, default_fan_timeout: Duration);
     is_field_default!(Config, storage_dir: PathBuf);
-    is_field_default!(Config, away_mode: AwayConfig);
     is_field_default!(Config, backplate: BackplateOptions);
     is_field_default!(Config, home_assistant: HomeAssistantOptions);
     is_field_default!(Config, backlight: BacklightOptions);
@@ -102,9 +100,6 @@ pub struct Config {
     #[serde(skip_serializing_if = "is_default::storage_dir")]
     pub storage_dir: PathBuf,
 
-    #[serde(skip_serializing_if = "is_default::away_mode")]
-    pub away_mode: AwayConfig,
-
     #[serde(skip_serializing_if = "is_default::backplate")]
     pub backplate: BackplateOptions,
 
@@ -122,12 +117,6 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn load<P: AsRef<Path>>(file_path: P) -> Result<Self> {
-        let toml_src = fs::read_to_string(file_path)?;
-        let config = toml::from_str(&toml_src)?;
-        Ok(config)
-    }
-
     pub fn schedule_for_mode(&self, mode: &HvacMode) -> Option<&[ScheduleConfig]> {
         match mode {
             HvacMode::Heat => {
@@ -152,7 +141,6 @@ impl Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            away_mode: AwayConfig::default(),
             backplate: BackplateOptions::default(),
             home_assistant: HomeAssistantOptions::default(),
             backlight: BacklightOptions::default(),
@@ -163,39 +151,6 @@ impl Default for Config {
             min_off_time: Duration::from_mins(5),
             default_fan_timeout: Duration::from_mins(15),
             storage_dir: PathBuf::from("/media/data"),
-        }
-    }
-}
-
-/// Away Mode
-///
-/// ```toml
-/// [away_mode]
-/// temp_heat = 16.0
-/// temp_cool = 20.0
-/// timeout = "0s"
-/// ```
-#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
-#[serde(default)]
-pub struct AwayConfig {
-    /// Away temp for heating mode, default 16.0
-    pub temp_heat: f32,
-
-    /// Away temp for cooling mode, default 22.0
-    pub temp_cool: f32,
-
-    /// Duration of no proximity movement before going into away mode,
-    /// or set to zero to disable away mode. Default "30m".
-    #[serde(with = "config_de::duration")]
-    pub timeout: Duration
-}
-
-impl Default for AwayConfig {
-    fn default() -> Self {
-        Self {
-            temp_heat: 16.0,
-            temp_cool: 22.0,
-            timeout: Duration::from_mins(30)
         }
     }
 }
@@ -220,6 +175,18 @@ impl Default for ClimateSettings {
             ],
             schedule: vec![],
         }
+    }
+}
+
+impl ClimateSettings {
+    pub fn get_away_temp(&self, mode: &HvacMode) -> Option<f32> {
+        self.get_preset_temp(&self.away.preset, mode)
+    }
+
+    pub fn get_preset_temp(&self, preset: &PresetName, mode: &HvacMode) -> Option<f32> {
+        let preset = self.presets.iter()
+            .find(|p| &p.name == preset);
+        preset.map_or(None, |p| p.get_temp(mode))
     }
 }
 

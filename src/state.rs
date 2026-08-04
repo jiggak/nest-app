@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use anyhow::Result;
 use esphome_api::proto::{
@@ -25,7 +25,9 @@ use esphome_api::proto::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    config::Config, events::{Event, EventHandler, EventSender}, timer::TimerId
+    config::{ClimateSettings, Config},
+    events::{Event, EventHandler, EventSender},
+    timer::TimerId
 };
 
 #[derive(Debug, Clone)]
@@ -160,15 +162,21 @@ pub struct StateManager<S: EventSender> {
     event_sender: S,
     state: ThermostatState,
     config: Config,
+    climate_settings: ClimateSettings,
     saved_target_temp: f32,
     restore_mode: Option<HvacMode>,
     last_idle_time: Instant,
 }
 
 impl<S: EventSender> StateManager<S> {
-    pub fn new(config: &Config, state: ThermostatState, event_sender: S) -> Result<Self> {
+    pub fn new(
+        config: &Config,
+        climate_settings: &ClimateSettings,
+        state: ThermostatState,
+        event_sender: S
+    ) -> Result<Self> {
         event_sender.send_event(
-            Event::TimeoutReset(TimerId::Away, config.away_mode.timeout)
+            Event::TimeoutReset(TimerId::Away, climate_settings.away.timeout)
         )?;
         event_sender.send_event(
             Event::TimeoutReset(TimerId::Backlight, config.backlight.timeout)
@@ -178,6 +186,7 @@ impl<S: EventSender> StateManager<S> {
             event_sender,
             state,
             config: config.clone(),
+            climate_settings: climate_settings.clone(),
             saved_target_temp: 0.0,
             restore_mode: None,
             last_idle_time: Instant::now(),
@@ -231,20 +240,15 @@ impl<S: EventSender> StateManager<S> {
         }
     }
 
+    // TODO should this be replaced with something like? `set_preset(climate.away.preset)`
     fn set_away(&mut self, is_away: bool) -> bool {
         if is_away != self.state.away {
             self.state.away = is_away;
 
             if self.state.away {
                 self.saved_target_temp = self.state.target_temp;
-                match self.state.mode {
-                    HvacMode::Heat => {
-                        self.state.target_temp = self.config.away_mode.temp_heat;
-                    }
-                    HvacMode::Cool => {
-                        self.state.target_temp = self.config.away_mode.temp_cool;
-                    }
-                    _ => { }
+                if let Some(temp) = self.climate_settings.get_away_temp(&self.state.mode) {
+                    self.state.target_temp = temp;
                 }
             } else {
                 self.state.target_temp = self.saved_target_temp;
@@ -337,7 +341,7 @@ impl<S: EventSender> EventHandler for StateManager<S> {
             }
             Event::SetAway(false) | Event::ProximityNear | Event::ProximityFar | Event::Dial(_) => {
                 self.event_sender.send_event(
-                    Event::TimeoutReset(TimerId::Away, self.config.away_mode.timeout)
+                    Event::TimeoutReset(TimerId::Away, self.climate_settings.away.timeout)
                 )?;
                 self.set_away(false)
             }
@@ -387,7 +391,7 @@ impl<S: EventSender> EventHandler for StateManager<S> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::mpsc::Sender;
+    use std::{sync::mpsc::Sender, time::Duration};
 
     use super::*;
     use crate::events::{DefaultEventSource, EventSource};
@@ -397,12 +401,15 @@ mod tests {
     ) -> (DefaultEventSource, StateManager<Sender<Event>>)
     {
         let mut config = Config::default();
+        let climate_settings = ClimateSettings::default();
         config.temp_deadband = 0.4;
         config.temp_overrun = 0.2;
 
         let event_source = DefaultEventSource::new();
         let state_manager = StateManager::new(
-            &config, state,
+            &config,
+            &climate_settings,
+            state,
             event_source.event_sender()
         ).unwrap();
 

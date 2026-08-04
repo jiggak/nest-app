@@ -70,6 +70,7 @@ fn main() -> Result<()> {
 
     let mut state_manager = state::StateManager::new(
         &config,
+        &climate_stettings,
         state.clone(),
         event_source.event_sender()
     )?;
