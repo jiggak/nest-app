@@ -29,7 +29,7 @@ use esphome_api::{
 
 use crate::{
     events::{Event, EventHandler, EventSender},
-    state::ThermostatState
+    state::{PresetName, ThermostatState}
 };
 
 mod home_assistant_options;
@@ -50,18 +50,13 @@ impl HomeAssistant {
         &self,
         options: &HomeAssistantOptions,
         stream_provider: impl MessageStreamProvider<S> + Send + 'static,
-        event_sender: impl EventSender + Send + 'static
+        delegate: HvacRequestHandler<impl EventSender + Send + 'static>
     )
         where S: MessageStream + Send + 'static
     {
         let addr = options.listen_addr.clone();
 
         let connection_observer = self.message_sender.clone();
-
-        let delegate = HvacRequestHandler::new(
-            thermostat_entity(options.get_object_id()),
-            event_sender
-        );
 
         let handler = DefaultHandler {
             delegate: delegate,
@@ -109,13 +104,13 @@ impl EventHandler for HomeAssistant {
     }
 }
 
-struct HvacRequestHandler<S> {
+pub struct HvacRequestHandler<S> {
     thermostat_entity: ListEntitiesClimateResponse,
     event_sender: S
 }
 
 impl<S: EventSender> HvacRequestHandler<S> {
-    fn new(thermostat_entity: ListEntitiesClimateResponse, event_sender: S) -> Self {
+    pub fn new(thermostat_entity: ListEntitiesClimateResponse, event_sender: S) -> Self {
         Self {
             thermostat_entity,
             event_sender
@@ -164,7 +159,7 @@ impl<S: EventSender> RequestHandler for HvacRequestHandler<S> {
     }
 }
 
-fn thermostat_entity(object_id: String) -> ListEntitiesClimateResponse {
+pub fn thermostat_entity(object_id: String, presets: &[PresetName]) -> ListEntitiesClimateResponse {
     let mut entity = ListEntitiesClimateResponse::default();
 
     entity.object_id = object_id;
@@ -181,13 +176,11 @@ fn thermostat_entity(object_id: String) -> ListEntitiesClimateResponse {
     entity.feature_flags =
         ClimateFeature::SUPPORTS_CURRENT_TEMPERATURE |
         ClimateFeature::SUPPORTS_ACTION;
-    // FIXME this should probably be dynamic based on user defined presets
-    entity.supported_presets = vec![
-        ClimatePreset::None as i32,
-        ClimatePreset::Home as i32,
-        ClimatePreset::Sleep as i32,
-        ClimatePreset::Away as i32,
-    ];
+
+    for preset in presets {
+        let preset: ClimatePreset = (*preset).into();
+        entity.push_supported_presets(preset);
+    }
 
     entity
 }

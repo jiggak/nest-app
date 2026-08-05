@@ -19,11 +19,7 @@
 use anyhow::Result;
 use log::info;
 
-use crate::{
-    config::Config,
-    events::{Event, EventHandler, EventSender},
-    state::HvacMode
-};
+use crate::events::{Event, EventHandler, EventSender};
 
 mod schedule_model;
 mod schedule_options;
@@ -65,7 +61,7 @@ impl<S: EventSender + Clone + Send + 'static> ScheduleManager<S> {
 }
 
 impl<S: EventSender + Clone + Send + 'static> EventHandler for ScheduleManager<S> {
-    fn handle_event(&mut self, event: &Event) -> Result<()> {
+    fn handle_event(&mut self, _event: &Event) -> Result<()> {
         // TODO reload schedule when climate settings changed
         // if let Event::SetMode(mode) = event {
         //     self.start_schedule(mode);

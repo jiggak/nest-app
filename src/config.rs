@@ -126,7 +126,7 @@ impl Default for Config {
 // ClimateOptions, ClimateProgram, Program, Policy, Profile
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct ClimateSettings {
-    pub away: AwayMode,
+    pub away: Option<AwayMode>,
     pub presets: Vec<Preset>,
     pub schedule: Vec<ScheduleEntry>,
 }
@@ -134,13 +134,8 @@ pub struct ClimateSettings {
 impl Default for ClimateSettings {
     fn default() -> Self {
         Self {
-            away: AwayMode::default(),
-            presets: vec![
-                Preset {
-                    name: PresetName::Away,
-                    temp: PresetTemp::Both { heat: 16.0, cool: 24.0 },
-                }
-            ],
+            away: None,
+            presets: vec![],
             schedule: vec![],
         }
     }
@@ -151,6 +146,12 @@ impl ClimateSettings {
         let preset = self.presets.iter()
             .find(|p| &p.name == preset);
         preset.map_or(None, |p| p.get_temp(mode))
+    }
+
+    pub fn preset_names(&self) -> Vec<PresetName> {
+        self.presets.iter()
+            .map(|p| p.name)
+            .collect()
     }
 }
 

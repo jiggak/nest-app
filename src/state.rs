@@ -206,9 +206,11 @@ impl<S: EventSender> StateManager<S> {
         state: ThermostatState,
         event_sender: S
     ) -> Result<Self> {
-        event_sender.send_event(
-            Event::TimeoutReset(TimerId::Away, climate_settings.away.timeout)
-        )?;
+        if let Some(away_mode) = &climate_settings.away {
+            event_sender.send_event(
+                Event::TimeoutReset(TimerId::Away, away_mode.timeout)
+            )?;
+        }
         event_sender.send_event(
             Event::TimeoutReset(TimerId::Backlight, config.backlight.timeout)
         )?;
@@ -372,9 +374,11 @@ impl<S: EventSender> EventHandler for StateManager<S> {
                 self.set_current_temp(*temp)
             }
             Event::SetPreset(None) | Event::ProximityNear | Event::ProximityFar | Event::Dial(_) => {
-                self.event_sender.send_event(
-                    Event::TimeoutReset(TimerId::Away, self.climate_settings.away.timeout)
-                )?;
+                if let Some(away_mode) = &self.climate_settings.away {
+                    self.event_sender.send_event(
+                        Event::TimeoutReset(TimerId::Away, away_mode.timeout)
+                    )?;
+                }
                 self.set_preset(None)
             }
             Event::TimeoutReached(TimerId::Away) => {

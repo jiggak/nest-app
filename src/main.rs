@@ -39,7 +39,7 @@ use esphome_api::server::{EncryptedStreamProvider, PlaintextStreamProvider};
 use log::{error, info};
 
 use crate::events::{Event, EventHandler, EventSource};
-use crate::home_assistant::HomeAssistant;
+use crate::home_assistant::{HomeAssistant, HvacRequestHandler, thermostat_entity};
 use crate::screen::{MainScreen, ScreenManager};
 
 fn main() -> Result<()> {
@@ -90,6 +90,11 @@ fn main() -> Result<()> {
     input_events::start_threads(&event_source)?;
 
     let mut home_assistant = HomeAssistant::new();
+    let hass_delegate = HvacRequestHandler::new(
+        thermostat_entity(config.home_assistant.get_object_id(), &climate_stettings.preset_names()),
+        event_source.event_sender()
+    );
+
     if let Some(key) = &config.home_assistant.encryption_key {
         let stream_factory = EncryptedStreamProvider::new(
             key,
@@ -100,13 +105,13 @@ fn main() -> Result<()> {
         home_assistant.start_listener(
             &config.home_assistant,
             stream_factory,
-            event_source.event_sender()
+            hass_delegate
         );
     } else {
         home_assistant.start_listener(
             &config.home_assistant,
             PlaintextStreamProvider::new(),
-            event_source.event_sender()
+            hass_delegate
         );
     }
 
