@@ -6,68 +6,155 @@ template = "docgen.html"
 toc = true
 +++
 
-> At this time, the installation process expects you to have a rooted thermostat
-> and familiarity with the Linux command line.
+ReTherm runs directly on a rooted second-generation Nest Thermostat and takes
+over the thermostat UI and HVAC control path while it is running. It is not a
+plugin for the stock Nest application.
 
-## Get root
+> ReTherm does not configure Wi-Fi. Before stopping the stock application,
+> confirm that the thermostat is on the correct network and that you can log in
+> over SSH. Keep the recovery commands below available.
 
-You'll need a rooted Nest with SSH access. Any of the following methods should work.
+## Prerequisites
 
-* [NestDFUAttack](https://github.com/exploiteers/NestDFUAttack)
-* [Cuckoo Loader](https://github.com/cuckoo-nest/cuckoo_loader)
-* [NoLongerEvil](https://nolongerevil.com/)
+- A rooted Nest Gen 2 thermostat with working SSH access. Rooting methods
+  include [NestDFUAttack](https://github.com/exploiteers/NestDFUAttack),
+  [Cuckoo Loader](https://github.com/cuckoo-nest/cuckoo_loader), and
+  [NoLongerEvil](https://nolongerevil.com/).
+- The thermostat and Home Assistant on networks that can reach each other.
+- A current ReTherm binary from the
+  [GitHub Releases page](https://github.com/jiggak/retherm/releases), or a binary
+  built from source as described in the project
+  [README](https://github.com/jiggak/retherm).
 
-## Download & Install
+The commands below run on the thermostat over SSH unless noted otherwise.
 
-I'll assume retherm will be placed under `/retherm/`, but choose whatever
-directory you like.
+## 1. Install ReTherm
 
-Go to the [Releases](https://github.com/jiggak/retherm/releases) page on Github
-and copy the latest download link.
+Create the application directory:
 
-If you prefer to build ReTherm yourself, details are in the project
-[README](https://github.com/jiggak/retherm).
+```sh
+mkdir -p /retherm
+```
 
-1. Make directory for ReTherm if it doesn't already exist
-   ```bash
-   mkdir /retherm
-   ```
-2. Download latest build
-   ```bash
-   # Replace download link with one copied from releases page.
-   # Make sure retherm is stopped before replacing (when updating, not installing first time).
-   curl -o /retherm/retherm https://github.com/jiggak/retherm/releases/download/v1.0.0/retherm
-   chmod +x /retherm/retherm
-   ```
-3. Create `/etc/init.d/retherm` with contents of [init.sh](https://github.com/jiggak/retherm/blob/main/init.sh)
-   ```bash
-   curl -o /etc/init.d/retherm https://raw.githubusercontent.com/jiggak/retherm/refs/heads/main/init.sh
-   chmod +x /etc/init.d/retherm
-   ```
-4. Stop Nest app `/etc/init.d/nestlabs stop`
-5. Start ReTherm `/etc/init.d/retherm start`
+Download a release. Replace `<VERSION>` with the release tag you selected:
 
-ReTherm will run until the device reboots; the default Nest app will start the
-next time the device reboots.
+```sh
+curl -L -o /retherm/retherm \
+  https://github.com/jiggak/retherm/releases/download/<VERSION>/retherm
+chmod +x /retherm/retherm
+```
 
-> Currently ReTherm doesn't have an interface for configuring Wifi.
-> It's crutial the Nest app starts at boot so that you maintain some means
-> to set network settings (i.e. SSH access).
+You can instead copy the binary from another computer with `scp`; the required
+destination is `/retherm/retherm` when using the supplied init script.
+
+## 2. Install the init script
+
+```sh
+curl -L -o /etc/init.d/retherm \
+  https://raw.githubusercontent.com/jiggak/retherm/refs/heads/main/init.sh
+chmod +x /etc/init.d/retherm
+```
+
+The script starts this exact command in the background:
+
+```sh
+/retherm/retherm --config /retherm/config.toml --syslog INFO
+```
+
+Consequently, both `/retherm/retherm` and `/retherm/config.toml` are required.
+
+## 3. Create the configuration
+
+Download the working example:
+
+```sh
+curl -L -o /retherm/config.toml \
+  https://raw.githubusercontent.com/jiggak/retherm/refs/heads/main/config.example.toml
+```
+
+Edit `friendly_name` and `node_name` for the thermostat. The minimal file is:
+
+```toml
+[home_assistant]
+friendly_name = "Hallway Nest"
+node_name = "hallway-nest"
+```
+
+Every setting has a default, but the init script still requires the file to
+exist. The default ESPHome Native API endpoint is `0.0.0.0:6053` and encryption
+is off unless `encryption_key` is configured. See [Configuration](/configuration/)
+before changing the listen address, HVAC wiring, or other defaults.
+
+## 4. Stop Nest and start ReTherm
+
+```sh
+/etc/init.d/nestlabs stop
+/etc/init.d/retherm start
+```
+
+Stopping `nestlabs` releases the thermostat UI/control path. Starting ReTherm
+then replaces that application for as long as ReTherm is running; the two are
+not intended to operate together.
+
+## 5. Verify startup
+
+Confirm the process exists:
+
+```sh
+pidof retherm
+```
+
+Confirm that the default ESPHome port is listening:
+
+```sh
+netstat -ltn | grep 6053
+```
+
+The init script sends INFO-level logs to syslog. Inspect recent messages with:
+
+```sh
+tail /var/log/messages
+```
+
+If you changed `listen_addr`, check its configured port instead. Then follow
+the [Home Assistant setup guide](/home-assistant/).
+
+## 6. Test before changing startup behavior
+
+From Home Assistant, confirm that the current temperature updates and test each
+HVAC mode your system uses. Verify the physical equipment behaves correctly.
+
+The supplied init script does not register ReTherm to start automatically, and
+this guide intentionally leaves the stock Nest application as the reboot
+default. ReTherm currently has no Wi-Fi settings UI; keeping the stock boot path
+reduces the chance of losing network and SSH access. Only change the thermostat's
+boot configuration after you have a tested recovery method appropriate to your
+rooting environment.
+
+## Return to the stock Nest application
+
+Stop ReTherm before restarting the stock application:
+
+```sh
+/etc/init.d/retherm stop
+/etc/init.d/nestlabs start
+```
+
+This returns the display and thermostat control path to the normal Nest
+software. If ReTherm was only started manually as described above, rebooting
+also returns to the stock boot behavior.
 
 ## Logging to syslogd
 
-Optionally, ReTherm can output logs to `syslogd`. Log messages will be written
-to `/var/log/messages`.
+The supplied init script already launches ReTherm with `--syslog INFO`, writing
+to `/var/log/messages`. Valid log levels are `OFF`, `ERROR`, `WARN`, `INFO`,
+`DEBUG`, and `TRACE`.
 
-```console
-# INFO can be one of: TRACE, DEBUG, INFO, ERROR
-retherm --syslog INFO
-```
+For remote log forwarding, append the appropriate remote option to
+`/etc/syslogd.options`; for example, where `192.168.1.42` is the log server:
 
-This opens up the option to forwarding log messages to a log collector by appending
-`-R 192.168.1.42:514 -L` to `/etc/syslogd.options` where "192.168.1.42" is the
-address of your log server.
-
-```
+```text
 -O /var/log/messages -s 384 -b 15 -u -R 192.168.1.42:514 -L
 ```
+
+See [Troubleshooting](/troubleshooting/) for startup and connection checks.

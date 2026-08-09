@@ -17,8 +17,8 @@ content = "Dial interface similar to stock Nest UI with mode select"
 [[extra.list]]
 title = "Home Assistant"
 content = '''
-Integrates with <a href="configuration#home-assistant">Home Assistant</a>
-seamlessly using ESPHome API, no additional services required'''
+Connect <a href="/home-assistant/">Home Assistant</a> directly to ReTherm on the
+thermostat using the ESPHome Native API; no cloud API, MQTT, or bridge required'''
 
 [[extra.list]]
 title = "Away mode"

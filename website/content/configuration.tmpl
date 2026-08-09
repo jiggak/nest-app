@@ -8,3 +8,20 @@ toc = true
 # DO NOT EDIT
 # Use `make_docs.sh` to generate content
 +++
+
+The supplied init script always loads `/retherm/config.toml`. The file must
+exist even though every setting inside it is optional. A minimal working file
+is:
+
+```toml
+[home_assistant]
+friendly_name = "Hallway Nest"
+node_name = "hallway-nest"
+```
+
+See [Home Assistant](/home-assistant/) for the connection procedure and optional
+ESPHome Noise encryption. The complete generated setting reference follows.
+
+Duration fields accept an integer number of seconds or a string ending in `s`
+or `m`, such as `30s` or `5m`. The current parser rejects `h`-suffixed values;
+express hours as minutes instead.

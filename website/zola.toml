@@ -25,9 +25,9 @@ url = "/configuration/"
 weight = 10
 
 [[extra.menu.main]]
-name = "Theme"
-section = "theme"
-url = "/theme/"
+name = "Home Assistant"
+section = "home-assistant"
+url = "/home-assistant/"
 weight = 20
 
 [[extra.menu.main]]
@@ -35,6 +35,18 @@ name = "Install"
 section = "install"
 url = "/install/"
 weight = 30
+
+[[extra.menu.main]]
+name = "Troubleshooting"
+section = "troubleshooting"
+url = "/troubleshooting/"
+weight = 40
+
+[[extra.menu.main]]
+name = "Theme"
+section = "theme"
+url = "/theme/"
+weight = 50
 
 [[extra.menu.social]]
 name = "GitHub"

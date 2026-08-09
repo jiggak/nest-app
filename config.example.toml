@@ -1,0 +1,14 @@
+# The supplied init script loads this file from /retherm/config.toml.
+# Every setting is optional; uncomment values only when you want to override a
+# default.
+
+[home_assistant]
+friendly_name = "Hallway Nest"
+node_name = "hallway-nest"
+
+# Default ESPHome Native API listen address:
+# listen_addr = "0.0.0.0:6053"
+
+# Optional ESPHome Noise encryption. This must be a base64-encoded 32-byte key,
+# and the same key must be entered in Home Assistant:
+# encryption_key = "<base64 ESPHome Noise PSK>"

@@ -8,6 +8,24 @@ toc = true
 # DO NOT EDIT
 # Use `make_docs.sh` to generate content
 +++
+
+The supplied init script always loads `/retherm/config.toml`. The file must
+exist even though every setting inside it is optional. A minimal working file
+is:
+
+```toml
+[home_assistant]
+friendly_name = "Hallway Nest"
+node_name = "hallway-nest"
+```
+
+See [Home Assistant](/home-assistant/) for the connection procedure and optional
+ESPHome Noise encryption. The complete generated setting reference follows.
+
+Duration fields accept an integer number of seconds or a string ending in `s`
+or `m`, such as `30s` or `5m`. The current parser rejects `h`-suffixed values;
+express hours as minutes instead.
+
 # Config file
 
 Launch retherm with the path to your custom configuration.
@@ -39,7 +57,9 @@ Defaults to 0.4
 
 ## min_off_time
 
-Minimum off time for cooling to allow AC refrigerant pressures to equalize.
+Minimum idle time before ReTherm energizes a new HVAC action. This also
+provides compressor protection by allowing refrigerant pressures to
+equalize.
 
 Defaults to "5m"
 
@@ -83,7 +103,7 @@ or set to zero to disable away mode. Default "30m".
 [backplate]
 near_pir_threshold = 15
 serial_port = "/dev/ttyO2"
-wiring = { heat_wire: "W1", cool_wire: "Y1" }
+wiring = { type = "HeatAndCool", heat_wire = "W1", cool_wire = "Y1", fan_wire = "G" }
 ```
 
 ## near_pir_threshold
@@ -96,7 +116,8 @@ Path to backplate serial device file, default "/dev/ttyO2"
 
 ## wiring
 
-HVAC wiring configuration, default `{ heat_wire: "W1", cool_wire: "Y1" }`.
+HVAC wiring configuration. Defaults to
+`{ type = "HeatAndCool", heat_wire = "W1", cool_wire = "Y1", fan_wire = "G" }`.
 Valid wire names: W1, Y1, G, OB, W2, Y2, Star.
 
 # Home Assistant
@@ -109,17 +130,19 @@ encryption_key = "..."
 
 ## object_id
 
-Object ID used internall by home assistant.
-Defaults to "climage.{node_name}".
+ESPHome climate object ID used by Home Assistant.
+Defaults to "climate.{node_name}".
 
 ## listen_addr
 
-Listen address for ESP Home API server, default "0.0.0.0:6053"
+Bind address for the ESPHome Native API server.
+Defaults to "0.0.0.0:6053", which listens on all IPv4 interfaces.
 
 ## encryption_key
 
-Encryption key as 32 byte base64 string. When not provided, the
-connection uses plaintext messages.
+ESPHome Noise encryption key as a base64-encoded 32-byte value.
+When not provided, the connection uses plaintext messages. The same key
+must be supplied to Home Assistant.
 See [ESP Home Native API](https://esphome.io/components/api/)
 for a tool that generates a random key.
 
@@ -130,23 +153,26 @@ Defaults to "ReTherm {version}".
 
 ## node_name
 
-Node name, defaults to the system hostname
+ESPHome node name. Defaults to the system hostname, or "retherm" if the
+hostname cannot be read.
 
 ## friendly_name
 
-Friendly name displayed in as label for thermostat control
+Friendly device name displayed in Home Assistant.
+Defaults to "ReTherm Thermostat".
 
 ## manufacturer
 
-Manufactuer name, defaults to "Nest"
+Manufacturer name, defaults to "Nest".
 
 ## model
 
-Model name, defaults to "Gen2 Thermostat"
+Model name, defaults to "Gen2 Thermostat".
 
 ## mac_address
 
-Mac address, defaults to address of system interface address
+MAC address, defaults to an address found on a system interface. A
+fallback value is used if no address can be read.
 
 # Backlight
 
@@ -180,7 +206,7 @@ set_points = [
 
 You can define more than one schedule entry, and it will overlap the
 previous. In the example below, the temperature will be set to 20.0
-at 8am everyday, and set down to 16.0 at 9am Monday and Wednsday.
+at 8am every day, and set down to 16.0 at 9am Monday and Wednesday.
 
 ```toml
 [[schedule_heat]]
@@ -190,7 +216,7 @@ set_points = [
 ]
 
 [[schedule_heat]]
-days_of_week = ["Monday", "Wednsday"]
+days_of_week = ["Mon", "Wed"]
 set_points = [
    { time = "09:00", temp = 16.0 }
 ]
@@ -204,9 +230,8 @@ One of "EveryDay", "WeekDays", "WeekEnd"
 
 Or...
 
-List of weekdays ["Monday", "Tuesday", ...]
+List of weekday values: "Mon", "Tue", "Wed", "Thur", "Fri", "Sat", "Sun".
 
 ## set_points
 
 List of set points with time of day and temperature
-

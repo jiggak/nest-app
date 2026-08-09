@@ -1,72 +1,110 @@
 # (Re)Therm
 
-(Re)store remote management of Gen2 Nest Thermostat through your existing
-Home Assistant setup.
+ReTherm is a replacement thermostat application for a rooted second-generation
+Nest Thermostat. It runs **on the thermostat itself**, drives the Nest display
+and backplate, and provides remote control to Home Assistant through an
+ESPHome Native API server.
 
-This project aims to provide a completely new UI for a rooted Gen 2 Nest
-Thermostat.
+ReTherm is not a plugin for the stock Nest application. The stock application
+must be stopped while ReTherm is running, so test the installation before
+changing anything that starts automatically at boot.
 
-## Highlevel list of features for MVP
+## How Home Assistant connects
 
-- [x] Bi-directional Home Assistant connection using esphome API
-- [ ] Automatic device discovery in Home Assistant (mDNS)
-- [x] Dial interface similar to stock Nest UI with mode select
-- [x] Away mode based on presence sensors
-- [x] Turning the HVAC system on/off to reach target temp.
-- [x] Fan mode with timer to switch off fan
-- [x] Configurable interface look/feel (separate from app config)
-- [x] Configuration file for settings such as:
-  - [x] HA related parameters (api key, device name, etc)
-  - [x] Screen brightness, auto-off timeout
-  - [x] HVAC wiring settings
-- [ ] Integrate with system wifi manager (Connman 1.29)
-- [x] Screen auto-off, wake on user input
+```text
++----------------+       ESPHome Native API        +--------------------------+
+| Home Assistant | ------------------------------> | ReTherm on the rooted Nest|
+|                |          TCP 6053               | Gen 2 thermostat          |
++----------------+                                  +--------------------------+
+```
 
-## Development Mode
+Home Assistant connects straight to ReTherm at the thermostat's IP address.
+This path does not use Google's Nest API, the stock Nest application,
+NoLongerEvil's Home Assistant integration, or MQTT. ReTherm currently does not
+implement mDNS/zeroconf discovery, so add it to Home Assistant manually by IP.
 
-Run `cargo run` to start retherm in a simulated window (uses SDL, which needs
-to be installed). Some device specific features don't work in this mode.
+ReTherm exposes one ESPHome climate entity with:
 
-## Build Requirements
+- current and target temperature;
+- `off`, `heat`, `cool`, and `fan only` modes;
+- the current HVAC action (`idle`, `heating`, `cooling`, or `fan`); and
+- `none` and `away` presets.
 
-Add target with `rustup`
+Home Assistant can change the target temperature, mode, and away preset. The
+entity ID is assigned from the configured ESPHome object/node naming, so do not
+assume a fixed entity ID.
 
-```bash
+## Install on a thermostat
+
+The complete installation guide is on the
+[documentation site](https://retherm.kropf.io/install/). In outline:
+
+1. Root the Gen 2 Nest and confirm SSH access.
+2. Copy the release binary to `/retherm/retherm` and make it executable.
+3. Install [`init.sh`](init.sh) as `/etc/init.d/retherm`.
+4. Create `/retherm/config.toml`. This file is required by the supplied init
+   script; [`config.example.toml`](config.example.toml) is a working starting
+   point.
+5. Stop the stock application with `/etc/init.d/nestlabs stop`.
+6. Start ReTherm with `/etc/init.d/retherm start`.
+7. Confirm the process is running and TCP port 6053 is listening.
+8. Add the thermostat to Home Assistant manually with the ESPHome integration.
+
+A minimal configuration is:
+
+```toml
+[home_assistant]
+friendly_name = "Hallway Nest"
+node_name = "hallway-nest"
+```
+
+All configuration values are optional, but the configuration **file** is not
+optional when using the supplied init script. By default the ESPHome server
+listens on `0.0.0.0:6053` without encryption. See
+[Configuration](https://retherm.kropf.io/configuration/) for every setting and
+[Home Assistant](https://retherm.kropf.io/home-assistant/) for optional ESPHome
+Noise encryption.
+
+To return safely to the stock Nest software:
+
+```sh
+/etc/init.d/retherm stop
+/etc/init.d/nestlabs start
+```
+
+## Add it to Home Assistant
+
+1. Start ReTherm and determine the thermostat's IP address.
+2. In Home Assistant, open **Settings → Devices & services → Add Integration →
+   ESPHome**.
+3. Enter the thermostat's IP address and port `6053` (unless `listen_addr` was
+   changed).
+4. If `encryption_key` is not set in ReTherm, leave encryption/password fields
+   blank. If it is set, enter the same key in Home Assistant.
+5. Complete the integration and test temperature and HVAC mode changes.
+
+See the [troubleshooting guide](https://retherm.kropf.io/troubleshooting/) if
+Home Assistant cannot connect or ReTherm does not start.
+
+## Development
+
+Run `cargo run` to start ReTherm in a simulated SDL window. Device-specific
+features do not work in simulation.
+
+For a device build, add the ARM target and obtain the Nest toolchain:
+
+```sh
 rustup target add armv7-unknown-linux-gnueabihf
-```
-
-Get Arm toolchain (copied from docker image; requires docker)
-
-```bash
 just get-toolchain
-```
-
-## Building & Running
-
-First; the stock app needs to be stopped.
-
-```bash
-/etc/init.d/nestlabs stop
-```
-
-Optional: start `build_recv.sh` on device and use `just push` to build,
-push to device, and restart app (uses netcat on port 51234).
-
-Or build and send manually.
-
-```bash
-# Build output at `target/armv7-unknown-linux-gnueabihf/release/retherm`
 just build
 ```
 
-## Build with Docker
+The binary is written to
+`target/armv7-unknown-linux-gnueabihf/release/retherm`. Alternatively, use
+`just build-docker` to build with Docker.
 
-If you do not want to install the build tools, you can use docker to build.
-
-```bash
-# Build output at `target/armv7-unknown-linux-gnueabihf/release/retherm`
-just build-with-docker
-```
+For development deployment, start `build_recv.sh` on the thermostat and use
+`just push` to build, send the binary with netcat on port 51234, and restart it.
 
 ## Stretch goals
 
@@ -102,3 +140,11 @@ This is the behaviour I've observed with the stock Nest app.
   (presummably until battery dies)
 * Need to look into what Nest app does; could it be as simple setting kernel
   power state?
+
+## Current limitations
+
+- No mDNS/zeroconf discovery; configure the ESPHome integration by IP.
+- No Wi-Fi configuration UI. Keep a tested way to restore the stock Nest
+  application so that network settings and SSH access remain recoverable.
+- ReTherm is intended for rooted Gen 2 hardware and is not a Google Nest cloud
+  integration.
