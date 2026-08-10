@@ -63,12 +63,14 @@ impl Storage {
     }
 
     pub fn read_config(&self) -> Result<Config> {
-        let config = self.backend.read("config.toml")?.unwrap_or_default();
+        let config = self.backend.read(env::config_file_name())?
+            .unwrap_or_default();
         Ok(config)
     }
 
     pub fn read_climate_settings(&self) -> Result<ClimateSettings> {
-        let settings = self.backend.read("climate-settings.toml")?.unwrap_or_default();
+        let settings = self.backend.read(env::climate_file_name())?
+            .unwrap_or_default();
         Ok(settings)
     }
 }
@@ -83,8 +85,8 @@ fn start_write_thread(backend: StorageBackend) -> Sender<Storable> {
                     let state = StoredState::from(&state);
                     backend.write(env::state_file_name(), state).unwrap();
                 }
-                Storable::Config(config) => {
-                    backend.write("config.toml", config).unwrap();
+                Storable::Settings(settings) => {
+                    backend.write(env::climate_file_name(), settings).unwrap();
                 }
             }
         }
@@ -140,7 +142,7 @@ impl From<&StoredState> for ThermostatState {
 
 enum Storable {
     State(ThermostatState),
-    Config(Config),
+    Settings(ClimateSettings),
 }
 
 #[derive(Clone)]

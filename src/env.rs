@@ -61,6 +61,27 @@ pub fn get_pkg_name() -> &'static str {
 pub fn state_file_name() -> String {
     match std::env::var("RETHERM_STATE_FILE") {
         Ok(file_name) => file_name,
-        Err(_) => String::from("retherm.state.toml")
+        Err(_) => String::from("state.toml")
+    }
+}
+
+pub fn config_file_name() -> String {
+    match std::env::var("RETHERM_CONFIG_FILE") {
+        Ok(file_name) => file_name,
+        Err(_) => String::from("config.toml")
+    }
+}
+
+pub fn climate_file_name() -> String {
+    match std::env::var("RETHERM_CLIMATE_FILE") {
+        Ok(file_name) => file_name,
+        Err(_) => String::from("climate.toml")
+    }
+}
+
+pub fn default_config_dir() -> String {
+    match std::env::var("RETHERM_CONFIG_DIR") {
+        Ok(dir_path) => dir_path,
+        Err(_) => String::from(".retherm")
     }
 }
