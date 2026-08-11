@@ -177,6 +177,8 @@ pub fn thermostat_entity(object_id: String, presets: &[PresetName]) -> ListEntit
         ClimateFeature::SUPPORTS_CURRENT_TEMPERATURE |
         ClimateFeature::SUPPORTS_ACTION;
 
+    // Always include "None" which means `None` variant of `Option<Preset>`
+    entity.push_supported_presets(ClimatePreset::None);
     for preset in presets {
         let preset: ClimatePreset = (*preset).into();
         entity.push_supported_presets(preset);
