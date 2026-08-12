@@ -486,16 +486,34 @@ mod tests {
     use std::{sync::mpsc::Sender, time::Duration};
 
     use super::*;
-    use crate::events::{DefaultEventSource, EventSource};
+    use crate::{
+        config::{Preset, PresetTemp},
+        events::{DefaultEventSource, EventSource}
+    };
 
     fn state_manager(
         state: ThermostatState
     ) -> (DefaultEventSource, StateManager<Sender<Event>>)
     {
         let mut config = Config::default();
-        let climate_settings = ClimateSettings::default();
         config.temp_deadband = 0.4;
         config.temp_overrun = 0.2;
+
+        let mut climate_settings = ClimateSettings::default();
+        climate_settings.presets = vec![
+            Preset {
+                name: PresetName::Away,
+                temp: PresetTemp::Both { heat: 15.0, cool: 25.0 }
+            },
+            Preset {
+                name: PresetName::Home,
+                temp: PresetTemp::Both { heat: 20.0, cool: 22.0 }
+            },
+            Preset {
+                name: PresetName::Sleep,
+                temp: PresetTemp::Both { heat: 16.0, cool: 24.0 }
+            },
+        ];
 
         let event_source = DefaultEventSource::new();
         let state_manager = StateManager::new(
@@ -694,6 +712,93 @@ mod tests {
         // Switch mode to cool, current temp within target temp, go idle
         mgr.handle_event(&Event::SetMode(HvacMode::Cool))?;
         assert!(mgr.state.action == HvacAction::Idle);
+
+        Ok(())
+    }
+
+    #[test]
+    fn target_temp_clears_preset() -> Result<()> {
+        let state = ThermostatState {
+            mode: HvacMode::Cool,
+            target_temp: 20.0,
+            current_temp: 20.0,
+            action: HvacAction::Idle,
+            backplate: true,
+            ..ThermostatState::default()
+        };
+
+        let (_x, mut mgr) = state_manager(state);
+
+        mgr.handle_event(&Event::SetPreset(Some(PresetName::Sleep)))?;
+        assert!(mgr.state.preset == Some(PresetName::Sleep));
+        assert!(mgr.state.target_temp == 24.0);
+
+        mgr.handle_event(&Event::SetTargetTemp(20.0))?;
+        assert!(mgr.state.preset == None);
+
+        Ok(())
+    }
+
+    #[test]
+    fn exit_away_mode_restores_temp() -> Result<()> {
+        let state = ThermostatState {
+            mode: HvacMode::Cool,
+            target_temp: 20.0,
+            current_temp: 20.0,
+            action: HvacAction::Idle,
+            backplate: true,
+            ..ThermostatState::default()
+        };
+
+        let (_x, mut mgr) = state_manager(state);
+
+        mgr.handle_event(&Event::TimeoutReached(TimerId::Away))?;
+        assert!(mgr.state.preset == Some(PresetName::Away));
+        assert!(mgr.state.target_temp == 25.0);
+
+        mgr.handle_event(&Event::ProximityNear)?;
+        assert!(mgr.state.preset == None);
+        assert!(mgr.state.target_temp == 20.0);
+
+        mgr.handle_event(&Event::SetPreset(Some(PresetName::Home)))?;
+        assert!(mgr.state.preset == Some(PresetName::Home));
+        assert!(mgr.state.target_temp == 22.0);
+
+        mgr.handle_event(&Event::TimeoutReached(TimerId::Away))?;
+        assert!(mgr.state.preset == Some(PresetName::Away));
+        assert!(mgr.state.target_temp == 25.0);
+
+        mgr.handle_event(&Event::ProximityNear)?;
+        assert!(mgr.state.preset == Some(PresetName::Home));
+        assert!(mgr.state.target_temp == 22.0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn exit_away_mode_restores_schedule_preset() -> Result<()> {
+        let state = ThermostatState {
+            mode: HvacMode::Cool,
+            target_temp: 20.0,
+            current_temp: 20.0,
+            action: HvacAction::Idle,
+            backplate: true,
+            ..ThermostatState::default()
+        };
+
+        let (_x, mut mgr) = state_manager(state);
+
+        mgr.handle_event(&Event::TimeoutReached(TimerId::Away))?;
+        assert!(mgr.state.preset == Some(PresetName::Away));
+        assert!(mgr.state.target_temp == 25.0);
+
+        mgr.handle_event(&Event::SchedulePreset(PresetName::Sleep))?;
+        assert!(mgr.state.preset == Some(PresetName::Away));
+        assert!(mgr.state.target_temp == 25.0);
+
+        mgr.handle_event(&Event::ProximityNear)?;
+        assert!(mgr.state.preset == Some(PresetName::Sleep));
+        assert!(mgr.state.target_temp == 24.0);
 
         Ok(())
     }
