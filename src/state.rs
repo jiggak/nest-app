@@ -182,9 +182,24 @@ impl TryFrom<ClimatePreset> for PresetName {
 impl From<PresetName> for ClimatePreset {
     fn from(value: PresetName) -> Self {
         match value {
-            PresetName::Home => Self::Away,
+            PresetName::Home => Self::Home,
             PresetName::Sleep => Self::Sleep,
             PresetName::Away => Self::Away,
+        }
+    }
+}
+
+enum SavedTemp {
+    TargetTemp(f32),
+    Preset(PresetName),
+}
+
+impl From<&ThermostatState> for SavedTemp {
+    fn from(value: &ThermostatState) -> Self {
+        if let Some(preset) = value.preset {
+            SavedTemp::Preset(preset)
+        } else {
+            SavedTemp::TargetTemp(value.target_temp)
         }
     }
 }
@@ -194,7 +209,7 @@ pub struct StateManager<S: EventSender> {
     state: ThermostatState,
     config: Config,
     climate_settings: ClimateSettings,
-    saved_target_temp: f32,
+    restore_temp: Option<SavedTemp>,
     restore_mode: Option<HvacMode>,
     last_idle_time: Instant,
 }
@@ -220,7 +235,7 @@ impl<S: EventSender> StateManager<S> {
             state,
             config: config.clone(),
             climate_settings: climate_settings.clone(),
-            saved_target_temp: 0.0,
+            restore_temp: None,
             restore_mode: None,
             last_idle_time: Instant::now(),
         })
@@ -273,24 +288,58 @@ impl<S: EventSender> StateManager<S> {
         }
     }
 
+    fn away_start(&mut self) -> bool {
+        if self.state.preset != Some(PresetName::Away) {
+            self.restore_temp = Some(SavedTemp::from(&self.state));
+            self.set_preset(Some(PresetName::Away))
+        } else {
+            false
+        }
+    }
+
+    fn away_stop(&mut self) -> bool {
+        if self.state.preset == Some(PresetName::Away) {
+            match self.restore_temp {
+                Some(SavedTemp::Preset(preset)) => {
+                    self.restore_temp = None;
+                    self.set_preset(Some(preset))
+                }
+                Some(SavedTemp::TargetTemp(temp)) => {
+                    self.restore_temp = None;
+                    self.set_preset(None);
+                    self.set_target_temp(temp)
+                }
+                None => false
+            }
+        } else {
+            false
+        }
+    }
+
     fn set_preset(&mut self, preset: Option<PresetName>) -> bool {
         if preset != self.state.preset {
             self.state.preset = preset;
 
             if let Some(preset) = &preset {
-                self.saved_target_temp = self.state.target_temp;
                 if let Some(temp) = self.climate_settings.get_preset_temp(preset, &self.state.mode) {
                     self.state.target_temp = temp;
                 } else {
                     log::warn!("Missing target temp for preset {preset:?}");
                 }
-            } else {
-                self.state.target_temp = self.saved_target_temp;
             }
 
             true
         } else {
             false
+        }
+    }
+
+    fn set_schedule_preset(&mut self, preset: PresetName) -> bool {
+        if self.state.preset == Some(PresetName::Away) {
+            self.restore_temp = Some(SavedTemp::Preset(preset));
+            false
+        } else {
+            self.set_preset(Some(preset))
         }
     }
 
@@ -368,24 +417,28 @@ impl<S: EventSender> EventHandler for StateManager<S> {
                 self.set_mode(*mode)?
             }
             Event::SetTargetTemp(temp) => {
+                self.set_preset(None);
                 self.set_target_temp(*temp)
             }
             Event::SetCurrentTemp(temp) => {
                 self.set_current_temp(*temp)
             }
-            Event::SetPreset(None) | Event::ProximityNear | Event::ProximityFar | Event::Dial(_) => {
+            Event::ProximityNear | Event::ProximityFar | Event::Dial(_) => {
                 if let Some(away_mode) = &self.climate_settings.away {
                     self.event_sender.send_event(
                         Event::TimeoutReset(TimerId::Away, away_mode.timeout)
                     )?;
                 }
-                self.set_preset(None)
+                self.away_stop()
             }
-            Event::TimeoutReached(TimerId::Away) => {
-                self.set_preset(Some(PresetName::Away))
+            Event::SetPreset(Some(PresetName::Away)) | Event::TimeoutReached(TimerId::Away) => {
+                self.away_start()
             }
             Event::SetPreset(preset) => {
                 self.set_preset(*preset)
+            }
+            Event::SchedulePreset(preset) => {
+                self.set_schedule_preset(*preset)
             }
             Event::TimeoutReached(TimerId::HvacLockout) => {
                 self.state.lockout = false;
