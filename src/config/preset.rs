@@ -73,9 +73,9 @@ impl Preset {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(untagged)]
 pub enum PresetTemp {
+    Both { heat: f32, cool: f32 },
     Heat { heat: f32 },
     Cool { cool: f32 },
-    Both { heat: f32, cool: f32 },
 }
 
 /// Away Mode
