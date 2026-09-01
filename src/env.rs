@@ -79,7 +79,7 @@ pub fn climate_file_name() -> String {
     }
 }
 
-pub fn default_config_dir() -> String {
+pub fn default_storage_dir() -> String {
     match std::env::var("RETHERM_CONFIG_DIR") {
         Ok(dir_path) => dir_path,
         Err(_) => String::from(".retherm")

@@ -5,10 +5,11 @@
 
 NAME=retherm
 APP_DIR=/retherm
+DATA_DIR=/media/data/retherm
 APP_PATH="${APP_DIR}/${NAME}"
 
 start_retherm() {
-   ${STARTDAEMON} -b -x ${APP_PATH} -- --config ${APP_DIR}/config.toml --syslog INFO
+   ${STARTDAEMON} -b -x ${APP_PATH} -- --storage-dir ${DATA_DIR} --syslog INFO
 }
 
 stop_retherm() {

@@ -24,32 +24,29 @@ use crate::{config::config_de, state::PresetName};
 /// Schedule
 ///
 /// ```toml
-/// [[schedule_heat]]
+/// [[schedule]]
 /// days_of_week = "EveryDay"
 /// set_points = [
-///    { time = "08:00", temp = 20.0 },
-///    { time = "22:00", temp = 16.0 },
+///    { time = "08:00", preset = "Home" },
+///    { time = "22:00", preset = "Sleep" },
 /// ]
 /// ```
 ///
-/// * Heating schedule `[[schedule_heat]]`
-/// * Cooling schedule `[[schedule_cool]]`
-///
 /// You can define more than one schedule entry, and it will overlap the
-/// previous. In the example below, the temperature will be set to 20.0
-/// at 8am everyday, and set down to 16.0 at 9am Monday and Wednsday.
+/// previous. In the example below, the perset will be change to "Home"
+/// at 8am everyday, and change to "Work" at 9am Monday and Wednsday.
 ///
 /// ```toml
-/// [[schedule_heat]]
+/// [[schedule]]
 /// days_of_week = "EveryDay"
 /// set_points = [
-///    { time = "08:00", temp = 20.0 }
+///    { time = "08:00", preset = "Home" }
 /// ]
 ///
-/// [[schedule_heat]]
+/// [[schedule]]
 /// days_of_week = ["Monday", "Wednsday"]
 /// set_points = [
-///    { time = "09:00", temp = 16.0 }
+///    { time = "09:00", preset = "Work" }
 /// ]
 /// ```
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -63,7 +60,7 @@ pub struct ScheduleEntry {
     /// List of weekdays ["Monday", "Tuesday", ...]
     pub days_of_week: DaysOfWeek,
 
-    /// List of set points with time of day and temperature
+    /// List of set points with time of day and name of preset
     pub set_points: Vec<SetPoint>
 }
 

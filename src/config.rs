@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::{path::PathBuf, time::Duration};
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
@@ -41,22 +41,28 @@ pub mod is_default {
     is_field_default!(Config, temp_overrun: f32);
     is_field_default!(Config, min_off_time: Duration);
     is_field_default!(Config, default_fan_timeout: Duration);
-    is_field_default!(Config, storage_dir: PathBuf);
     is_field_default!(Config, backplate: BackplateOptions);
     is_field_default!(Config, home_assistant: HomeAssistantOptions);
     is_field_default!(Config, backlight: BacklightOptions);
 }
 
-/// Config file
+/// App Config file
 ///
-/// Launch retherm with the path to your custom configuration.
+/// ReTherm will load configuration from `$RETHERM_STORAGE_DIR/$RETHERM_CONFIG_FILE`.
 ///
+/// Defaults to `$PWD/.retherm/config.toml`.
+///
+/// You can also launch retherm with the path to your storage directory.
 /// ```bash
-/// retherm --config ./your_config.toml
+/// # Load config file from /media/data/retherm/config.toml
+/// retherm --storage-dir /media/data/retherm
+///
+/// # Load config file from /media/data/retherm/foo.toml
+/// RETHERM_CONFIG_FILE=foo.toml retherm --storage-dir /media/data/retherm
 /// ```
 ///
-/// All config options have a default; you only need to include options
-/// you would like to override in your configuration file.
+/// All config options have a default; you only need to create a `config.toml`
+/// file and include options you would like to override.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(default)]
 pub struct Config {
@@ -92,12 +98,6 @@ pub struct Config {
     #[serde(skip_serializing_if = "is_default::default_fan_timeout")]
     pub default_fan_timeout: Duration,
 
-    /// Directory to store app state.
-    ///
-    /// Defaults to "/media/data"
-    #[serde(skip_serializing_if = "is_default::storage_dir")]
-    pub storage_dir: PathBuf,
-
     #[serde(skip_serializing_if = "is_default::backplate")]
     pub backplate: BackplateOptions,
 
@@ -118,24 +118,41 @@ impl Default for Config {
             temp_overrun: 0.4,
             min_off_time: Duration::from_mins(5),
             default_fan_timeout: Duration::from_mins(15),
-            storage_dir: PathBuf::from("/media/data"),
         }
     }
 }
 
-// ClimateOptions, ClimateProgram, Program, Policy, Profile
+/// Climate settings file
+///
+/// The climate settings is where you setup presets, create a weekly schedule
+/// to switch preset, and setup "Away Mode" (activate "Away" preset when
+/// thermostat does not detect movement for a period of time).
+///
+/// ReTherm will load climate settings from `$RETHERM_STORAGE_DIR/$RETHERM_CLIMATE_FILE`.
+///
+/// Defaults to `$PWD/.retherm/climate.toml`.
+///
+/// You can also launch retherm with the path to your storage directory.
+/// ```bash
+/// # Load config file from /media/data/retherm/climate.toml
+/// retherm --storage-dir /media/data/retherm
+///
+/// # Load config file from /media/data/retherm/foo.toml
+/// RETHERM_CLIMATE_FILE=foo.toml retherm --storage-dir /media/data/retherm
+/// ```
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+// FIXME not sold on the name - ClimateOptions, ClimateProgram, Program, Policy, Profile
 pub struct ClimateSettings {
-    pub away: Option<AwayMode>,
     pub presets: Vec<Preset>,
+    pub away: Option<AwayMode>,
     pub schedule: Vec<ScheduleEntry>,
 }
 
 impl Default for ClimateSettings {
     fn default() -> Self {
         Self {
-            away: None,
             presets: vec![],
+            away: None,
             schedule: vec![],
         }
     }

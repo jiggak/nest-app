@@ -55,8 +55,8 @@ fn main() -> Result<()> {
 
     install_panic_logging();
 
-    let config_dir = cli.config_dir
-        .unwrap_or(env::default_config_dir());
+    let storage_dir = cli.storage_dir
+        .unwrap_or(env::default_storage_dir());
 
     let theme = if let Some(file_path) = cli.theme {
         theme::Theme::load(file_path)?
@@ -66,7 +66,7 @@ fn main() -> Result<()> {
 
     let mut event_source = window::new_event_source()?;
 
-    let mut storage = storage::Storage::new(config_dir)?;
+    let mut storage = storage::Storage::new(storage_dir)?;
     let state = storage.read_state()?;
     let config = storage.read_config()?;
     let climate_stettings = storage.read_climate_settings()?;

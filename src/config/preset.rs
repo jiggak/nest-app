@@ -22,9 +22,29 @@ use serde::{Deserialize, Serialize};
 
 use crate::{config::config_de, state::{HvacMode, PresetName}};
 
+/// Presets
+///
+/// ```toml
+/// [[presets]]
+/// name = "Away"
+/// temp = { heat = 15.0, cool = 25.0 }
+///
+/// [[presets]]
+/// name = "Sleep"
+/// temp = { heat = 16.0, cool = 24.0 }
+///
+/// [[presets]]
+/// name = "Home"
+/// temp = { heat = 20.0, cool = 22.0 }
+/// ```
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Preset {
+    /// Name of preset; must be one of "Away", "Home", "Sleep"
     pub name: PresetName,
+
+    /// Preset temperature.
+    ///
+    /// `{ heat = 20.0 }` or `{ cool = 22.0 }` or `{ heat = 20.0, cool = 22.0 }`
     pub temp: PresetTemp,
 }
 
