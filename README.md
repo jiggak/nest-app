@@ -102,3 +102,11 @@ This is the behaviour I've observed with the stock Nest app.
   (presummably until battery dies)
 * Need to look into what Nest app does; could it be as simple setting kernel
   power state?
+
+## Release Process
+
+* Git tag with message for release notes
+  `git tag -a v1.1.0`
+* Push tag
+  `git push --tags`
+* Automation handles publishing a new release with tag message as release notes

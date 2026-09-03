@@ -5,8 +5,6 @@ on:
     tags:
       - 'v*'
 
-  workflow_dispatch:
-
 env:
   TOOLCHAIN_IMAGE: ghcr.io/${{ github.repository_owner }}/retherm-toolchain
 
@@ -41,7 +39,20 @@ jobs:
           name: retherm
           path: target/armv7-unknown-linux-gnueabihf/release/retherm
 
+      - name: Fetch tags
+        run: git fetch --depth=1 origin +refs/tags/*:refs/tags/*
+
+      - name: Get release message
+        id: tag
+        run: |
+          {
+            echo 'message<<EOF'
+            git tag -l --format='%(contents)' "${GITHUB_REF_NAME}"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: target/armv7-unknown-linux-gnueabihf/release/retherm
+          body: ${{ steps.tag.outputs.message }}
