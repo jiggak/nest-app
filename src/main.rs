@@ -31,6 +31,7 @@ mod state;
 mod storage;
 mod theme;
 mod timer;
+mod web_server;
 mod widgets;
 mod window;
 
@@ -117,6 +118,8 @@ fn main() -> Result<()> {
             hass_delegate
         );
     }
+
+    web_server::start_server(climate_stettings.clone())?;
 
     'running: loop {
         window.draw_screen(screen_manager.active_screen())?;
