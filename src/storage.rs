@@ -97,6 +97,15 @@ fn start_write_thread(backend: StorageBackend) -> Sender<Storable> {
 
 impl EventHandler for Storage {
     fn handle_event(&mut self, event: &Event) -> Result<()> {
+        match event {
+            Event::State(state) => {
+                self.write_thread.send(Storable::State(state.clone()))?;
+            }
+            Event::SettingsUpdate(settings) => {
+                self.write_thread.send(Storable::Settings(settings.clone()))?;
+            }
+            _ => { }
+        }
         if let Event::State(state) = event {
             self.write_thread.send(Storable::State(state.clone()))?;
         }

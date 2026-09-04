@@ -1,23 +1,23 @@
 use std::thread;
 
 use anyhow::{Result, anyhow};
-use rouille::{Response, Server, extension_to_mime, router};
+use rouille::{Request, Response, Server, extension_to_mime, router, try_or_400};
 
-use crate::config::ClimateSettings;
+use crate::{config::ClimateSettings, events::{Event, EventSender}};
 
 static WEB: include_dir::Dir =
     include_dir::include_dir!("$CARGO_MANIFEST_DIR/src/web");
 
-pub fn start_server(settings: ClimateSettings) -> Result<()> {
+pub fn start_server<S>(settings: ClimateSettings, event_sender: S) -> Result<()>
+    where S: EventSender + Send + Sync + 'static
+{
+    let handler = RequestHandler::new(settings, event_sender);
+
     let server = Server::new("0.0.0.0:8000", move |request| {
         router!(request,
-            (GET) (/api/settings) => {
-                Response::json(&settings)
-            },
-
-            _ => {
-                asset_response(request.url())
-            }
+            (GET) (/api/settings) => { handler.get_settings() },
+            (POST) (/api/settings) => { handler.post_settings(request) },
+            _ => asset_response(request.url())
         )
     });
 
@@ -28,6 +28,30 @@ pub fn start_server(settings: ClimateSettings) -> Result<()> {
     });
 
     Ok(())
+}
+
+struct RequestHandler<S> {
+    event_sender: S,
+    settings: ClimateSettings,
+}
+
+impl<S: EventSender + Send + Sync + 'static> RequestHandler<S> {
+    fn new(settings: ClimateSettings, event_sender: S) -> Self {
+        Self {
+            settings,
+            event_sender,
+        }
+    }
+
+    fn get_settings(&self) -> Response {
+        Response::json(&self.settings)
+    }
+
+    fn post_settings(&self, request: &Request) -> Response {
+        let settings: ClimateSettings = try_or_400!(rouille::input::json_input(request));
+        self.event_sender.send_event(Event::SettingsUpdate(settings)).unwrap();
+        Response::empty_204()
+    }
 }
 
 fn asset_response(url: String) -> Response {

@@ -119,7 +119,7 @@ fn main() -> Result<()> {
         );
     }
 
-    web_server::start_server(climate_stettings.clone())?;
+    web_server::start_server(climate_stettings.clone(), event_source.event_sender())?;
 
     'running: loop {
         window.draw_screen(screen_manager.active_screen())?;
