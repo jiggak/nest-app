@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use anyhow::Result;
 use esphome_api::proto::{
@@ -25,7 +25,9 @@ use esphome_api::proto::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    config::Config, events::{Event, EventHandler, EventSender}, timer::TimerId
+    config::{ClimateSettings, Config},
+    events::{Event, EventHandler, EventSender},
+    timer::TimerId
 };
 
 #[derive(Debug, Clone)]
@@ -34,7 +36,7 @@ pub struct ThermostatState {
     pub current_temp: f32,
     pub mode: HvacMode,
     pub action: HvacAction,
-    pub away: bool,
+    pub preset: Option<PresetName>,
     pub lockout: bool,
     /// Backplate connected flag
     pub backplate: bool,
@@ -68,13 +70,14 @@ impl ThermostatState {
         state.set_mode(self.mode.into());
         state.current_temperature = self.current_temp;
         state.target_temperature = self.target_temp;
-        state.preset = if self.away {
-            ClimatePreset::Away as i32
-        } else {
-            ClimatePreset::None as i32
-        };
+        state.preset = self.preset.map(|p| p.into())
+            .unwrap_or(ClimatePreset::None) as i32;
 
         state
+    }
+
+    pub fn is_away(&self) -> bool {
+        self.preset == Some(PresetName::Away)
     }
 }
 
@@ -85,7 +88,7 @@ impl Default for ThermostatState {
             current_temp: 20.0,
             action: HvacAction::Idle,
             mode: HvacMode::Heat,
-            away: false,
+            preset: None,
             lockout: false,
             backplate: false,
         }
@@ -156,20 +159,73 @@ impl From<HvacAction> for ClimateAction {
     }
 }
 
+#[derive(Deserialize, Serialize, Debug, Clone, Copy, PartialEq)]
+pub enum PresetName {
+    Home,
+    Sleep,
+    Away,
+}
+
+impl TryFrom<ClimatePreset> for PresetName {
+    type Error = anyhow::Error;
+
+    fn try_from(value: ClimatePreset) -> anyhow::Result<Self> {
+        Ok(match value {
+            ClimatePreset::Home => Self::Home,
+            ClimatePreset::Sleep => Self::Sleep,
+            ClimatePreset::Away => Self::Away,
+            v => return Err(anyhow::anyhow!("Unsupported climate preset {v:?}"))
+        })
+    }
+}
+
+impl From<PresetName> for ClimatePreset {
+    fn from(value: PresetName) -> Self {
+        match value {
+            PresetName::Home => Self::Home,
+            PresetName::Sleep => Self::Sleep,
+            PresetName::Away => Self::Away,
+        }
+    }
+}
+
+enum SavedTemp {
+    TargetTemp(f32),
+    Preset(PresetName),
+}
+
+impl From<&ThermostatState> for SavedTemp {
+    fn from(value: &ThermostatState) -> Self {
+        if let Some(preset) = value.preset {
+            SavedTemp::Preset(preset)
+        } else {
+            SavedTemp::TargetTemp(value.target_temp)
+        }
+    }
+}
+
 pub struct StateManager<S: EventSender> {
     event_sender: S,
     state: ThermostatState,
     config: Config,
-    saved_target_temp: f32,
+    climate_settings: ClimateSettings,
+    restore_temp: Option<SavedTemp>,
     restore_mode: Option<HvacMode>,
     last_idle_time: Instant,
 }
 
 impl<S: EventSender> StateManager<S> {
-    pub fn new(config: &Config, state: ThermostatState, event_sender: S) -> Result<Self> {
-        event_sender.send_event(
-            Event::TimeoutReset(TimerId::Away, config.away_mode.timeout)
-        )?;
+    pub fn new(
+        config: &Config,
+        climate_settings: &ClimateSettings,
+        state: ThermostatState,
+        event_sender: S
+    ) -> Result<Self> {
+        if let Some(away_mode) = &climate_settings.away {
+            event_sender.send_event(
+                Event::TimeoutReset(TimerId::Away, away_mode.timeout)
+            )?;
+        }
         event_sender.send_event(
             Event::TimeoutReset(TimerId::Backlight, config.backlight.timeout)
         )?;
@@ -178,7 +234,8 @@ impl<S: EventSender> StateManager<S> {
             event_sender,
             state,
             config: config.clone(),
-            saved_target_temp: 0.0,
+            climate_settings: climate_settings.clone(),
+            restore_temp: None,
             restore_mode: None,
             last_idle_time: Instant::now(),
         })
@@ -231,28 +288,58 @@ impl<S: EventSender> StateManager<S> {
         }
     }
 
-    fn set_away(&mut self, is_away: bool) -> bool {
-        if is_away != self.state.away {
-            self.state.away = is_away;
+    fn away_start(&mut self) -> bool {
+        if self.state.preset != Some(PresetName::Away) {
+            self.restore_temp = Some(SavedTemp::from(&self.state));
+            self.set_preset(Some(PresetName::Away))
+        } else {
+            false
+        }
+    }
 
-            if self.state.away {
-                self.saved_target_temp = self.state.target_temp;
-                match self.state.mode {
-                    HvacMode::Heat => {
-                        self.state.target_temp = self.config.away_mode.temp_heat;
-                    }
-                    HvacMode::Cool => {
-                        self.state.target_temp = self.config.away_mode.temp_cool;
-                    }
-                    _ => { }
+    fn away_stop(&mut self) -> bool {
+        if self.state.preset == Some(PresetName::Away) {
+            match self.restore_temp {
+                Some(SavedTemp::Preset(preset)) => {
+                    self.restore_temp = None;
+                    self.set_preset(Some(preset))
                 }
-            } else {
-                self.state.target_temp = self.saved_target_temp;
+                Some(SavedTemp::TargetTemp(temp)) => {
+                    self.restore_temp = None;
+                    self.set_preset(None);
+                    self.set_target_temp(temp)
+                }
+                None => false
+            }
+        } else {
+            false
+        }
+    }
+
+    fn set_preset(&mut self, preset: Option<PresetName>) -> bool {
+        if preset != self.state.preset {
+            self.state.preset = preset;
+
+            if let Some(preset) = &preset {
+                if let Some(temp) = self.climate_settings.get_preset_temp(preset, &self.state.mode) {
+                    self.state.target_temp = temp;
+                } else {
+                    log::warn!("Missing target temp for preset {preset:?}");
+                }
             }
 
             true
         } else {
             false
+        }
+    }
+
+    fn set_schedule_preset(&mut self, preset: PresetName) -> bool {
+        if self.state.preset == Some(PresetName::Away) {
+            self.restore_temp = Some(SavedTemp::Preset(preset));
+            false
+        } else {
+            self.set_preset(Some(preset))
         }
     }
 
@@ -330,19 +417,28 @@ impl<S: EventSender> EventHandler for StateManager<S> {
                 self.set_mode(*mode)?
             }
             Event::SetTargetTemp(temp) => {
+                self.set_preset(None);
                 self.set_target_temp(*temp)
             }
             Event::SetCurrentTemp(temp) => {
                 self.set_current_temp(*temp)
             }
-            Event::SetAway(false) | Event::ProximityNear | Event::ProximityFar | Event::Dial(_) => {
-                self.event_sender.send_event(
-                    Event::TimeoutReset(TimerId::Away, self.config.away_mode.timeout)
-                )?;
-                self.set_away(false)
+            Event::ProximityNear | Event::ProximityFar | Event::Dial(_) => {
+                if let Some(away_mode) = &self.climate_settings.away {
+                    self.event_sender.send_event(
+                        Event::TimeoutReset(TimerId::Away, away_mode.timeout)
+                    )?;
+                }
+                self.away_stop()
             }
-            Event::SetAway(true) | Event::TimeoutReached(TimerId::Away) => {
-                self.set_away(true)
+            Event::SetPreset(Some(PresetName::Away)) | Event::TimeoutReached(TimerId::Away) => {
+                self.away_start()
+            }
+            Event::SetPreset(preset) => {
+                self.set_preset(*preset)
+            }
+            Event::SchedulePreset(preset) => {
+                self.set_schedule_preset(*preset)
             }
             Event::TimeoutReached(TimerId::HvacLockout) => {
                 self.state.lockout = false;
@@ -387,10 +483,13 @@ impl<S: EventSender> EventHandler for StateManager<S> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::mpsc::Sender;
+    use std::{sync::mpsc::Sender, time::Duration};
 
     use super::*;
-    use crate::events::{DefaultEventSource, EventSource};
+    use crate::{
+        config::{Preset, PresetTemp},
+        events::{DefaultEventSource, EventSource}
+    };
 
     fn state_manager(
         state: ThermostatState
@@ -400,9 +499,27 @@ mod tests {
         config.temp_deadband = 0.4;
         config.temp_overrun = 0.2;
 
+        let mut climate_settings = ClimateSettings::default();
+        climate_settings.presets = vec![
+            Preset {
+                name: PresetName::Away,
+                temp: PresetTemp::Both { heat: 15.0, cool: 25.0 }
+            },
+            Preset {
+                name: PresetName::Home,
+                temp: PresetTemp::Both { heat: 20.0, cool: 22.0 }
+            },
+            Preset {
+                name: PresetName::Sleep,
+                temp: PresetTemp::Both { heat: 16.0, cool: 24.0 }
+            },
+        ];
+
         let event_source = DefaultEventSource::new();
         let state_manager = StateManager::new(
-            &config, state,
+            &config,
+            &climate_settings,
+            state,
             event_source.event_sender()
         ).unwrap();
 
@@ -595,6 +712,93 @@ mod tests {
         // Switch mode to cool, current temp within target temp, go idle
         mgr.handle_event(&Event::SetMode(HvacMode::Cool))?;
         assert!(mgr.state.action == HvacAction::Idle);
+
+        Ok(())
+    }
+
+    #[test]
+    fn target_temp_clears_preset() -> Result<()> {
+        let state = ThermostatState {
+            mode: HvacMode::Cool,
+            target_temp: 20.0,
+            current_temp: 20.0,
+            action: HvacAction::Idle,
+            backplate: true,
+            ..ThermostatState::default()
+        };
+
+        let (_x, mut mgr) = state_manager(state);
+
+        mgr.handle_event(&Event::SetPreset(Some(PresetName::Sleep)))?;
+        assert!(mgr.state.preset == Some(PresetName::Sleep));
+        assert!(mgr.state.target_temp == 24.0);
+
+        mgr.handle_event(&Event::SetTargetTemp(20.0))?;
+        assert!(mgr.state.preset == None);
+
+        Ok(())
+    }
+
+    #[test]
+    fn exit_away_mode_restores_temp() -> Result<()> {
+        let state = ThermostatState {
+            mode: HvacMode::Cool,
+            target_temp: 20.0,
+            current_temp: 20.0,
+            action: HvacAction::Idle,
+            backplate: true,
+            ..ThermostatState::default()
+        };
+
+        let (_x, mut mgr) = state_manager(state);
+
+        mgr.handle_event(&Event::TimeoutReached(TimerId::Away))?;
+        assert!(mgr.state.preset == Some(PresetName::Away));
+        assert!(mgr.state.target_temp == 25.0);
+
+        mgr.handle_event(&Event::ProximityNear)?;
+        assert!(mgr.state.preset == None);
+        assert!(mgr.state.target_temp == 20.0);
+
+        mgr.handle_event(&Event::SetPreset(Some(PresetName::Home)))?;
+        assert!(mgr.state.preset == Some(PresetName::Home));
+        assert!(mgr.state.target_temp == 22.0);
+
+        mgr.handle_event(&Event::TimeoutReached(TimerId::Away))?;
+        assert!(mgr.state.preset == Some(PresetName::Away));
+        assert!(mgr.state.target_temp == 25.0);
+
+        mgr.handle_event(&Event::ProximityNear)?;
+        assert!(mgr.state.preset == Some(PresetName::Home));
+        assert!(mgr.state.target_temp == 22.0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn exit_away_mode_restores_schedule_preset() -> Result<()> {
+        let state = ThermostatState {
+            mode: HvacMode::Cool,
+            target_temp: 20.0,
+            current_temp: 20.0,
+            action: HvacAction::Idle,
+            backplate: true,
+            ..ThermostatState::default()
+        };
+
+        let (_x, mut mgr) = state_manager(state);
+
+        mgr.handle_event(&Event::TimeoutReached(TimerId::Away))?;
+        assert!(mgr.state.preset == Some(PresetName::Away));
+        assert!(mgr.state.target_temp == 25.0);
+
+        mgr.handle_event(&Event::SchedulePreset(PresetName::Sleep))?;
+        assert!(mgr.state.preset == Some(PresetName::Away));
+        assert!(mgr.state.target_temp == 25.0);
+
+        mgr.handle_event(&Event::ProximityNear)?;
+        assert!(mgr.state.preset == Some(PresetName::Sleep));
+        assert!(mgr.state.target_temp == 24.0);
 
         Ok(())
     }

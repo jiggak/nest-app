@@ -19,10 +19,16 @@ github = "https://github.com/jiggak/retherm"
 
 # Menu items
 [[extra.menu.main]]
-name = "Configuration"
+name = "Config File"
 section = "configuration"
 url = "/configuration/"
 weight = 10
+
+[[extra.menu.main]]
+name = "Climate File"
+section = "climate"
+url = "/climate/"
+weight = 15
 
 [[extra.menu.main]]
 name = "Theme"

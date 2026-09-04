@@ -21,19 +21,20 @@ use std::{collections::HashMap, time::Duration};
 use chrono::prelude::*;
 use log::info;
 
-use crate::config::ScheduleConfig;
+use super::ScheduleEntry;
+use crate::state::PresetName;
 
-type ScheduleMap = HashMap<Weekday, HashMap<NaiveTime, f32>>;
+type ScheduleMap = HashMap<Weekday, HashMap<NaiveTime, PresetName>>;
 
 #[derive(Debug)]
 pub struct Schedule {
     schedule: ScheduleMap,
     max_age: Duration,
-    last_set_point: Option<f32>
+    last_set_point: Option<PresetName>
 }
 
 impl Schedule {
-    pub fn new(schedule: &[ScheduleConfig]) -> Self {
+    pub fn new(schedule: &[ScheduleEntry]) -> Self {
         let schedule = week_schedule(schedule);
         Self {
             schedule,
@@ -42,12 +43,12 @@ impl Schedule {
         }
     }
 
-    pub fn get_target_temp(&mut self, now: DateTime<Local>) -> Option<f32> {
+    pub fn get_preset(&mut self, now: DateTime<Local>) -> Option<PresetName> {
         let weekday = now.weekday();
         let time_of_day = now.time();
 
         if let Some(set_points) = self.schedule.get(&weekday) {
-            for (set_point_time, set_point_temp) in set_points {
+            for (set_point_time, set_point) in set_points {
                 // test if set point has been reached, or
                 if time_of_day >= *set_point_time
                     // consider set point reached if time is within small range
@@ -56,19 +57,20 @@ impl Schedule {
                     // don't repreat reporting setpoint more than once
                     && self.last_set_point.is_none()
                 {
-                    info!("Set point reached {set_point_time} {set_point_temp}");
-                    self.last_set_point = Some(*set_point_temp);
-                    return Some(*set_point_temp);
+                    info!("Set point reached {set_point_time} {set_point:?}");
+                    self.last_set_point = Some(*set_point);
+                    return Some(*set_point);
                 }
             }
         }
 
+        // FIXME setting state inside a getter is yucky
         self.last_set_point = None;
         None
     }
 }
 
-fn week_schedule(schedule: &[ScheduleConfig]) -> ScheduleMap {
+fn week_schedule(schedule: &[ScheduleEntry]) -> ScheduleMap {
     let mut week_schedule = HashMap::new();
 
     for s in schedule {
@@ -80,8 +82,8 @@ fn week_schedule(schedule: &[ScheduleConfig]) -> ScheduleMap {
             let day_schedle = week_schedule.get_mut(&day).unwrap();
             for p in &s.set_points {
                 day_schedle.entry(p.time)
-                    .and_modify(|temp| *temp = p.temp)
-                    .insert_entry(p.temp);
+                    .and_modify(|set_point| *set_point = p.preset)
+                    .insert_entry(p.preset);
             }
         }
     }
@@ -93,21 +95,24 @@ fn week_schedule(schedule: &[ScheduleConfig]) -> ScheduleMap {
 mod tests {
     use chrono::{Duration, prelude::*};
 
-    use crate::config::{DaysOfWeek, ScheduleConfig, SetPoint, WeekDayRange};
-    use super::Schedule;
+    use super::*;
+    use crate::{
+        schedule::{DaysOfWeek, ScheduleEntry, SetPoint, WeekDayRange},
+        state::PresetName
+    };
 
     fn daily_morning_temp_increase() -> Schedule {
         Schedule::new(&[
-            ScheduleConfig {
+            ScheduleEntry {
                 days_of_week: DaysOfWeek::Range(WeekDayRange::EveryDay),
                 set_points: vec![
                     SetPoint {
                         time: NaiveTime::from_hms_opt(8, 0, 0).unwrap(),
-                        temp: 20.0
+                        preset: PresetName::Home
                     },
                     SetPoint {
                         time: NaiveTime::from_hms_opt(10, 0, 0).unwrap(),
-                        temp: 16.0
+                        preset: PresetName::Sleep
                     }
                 ]
             }
@@ -124,14 +129,14 @@ mod tests {
 
         let mut date = Local.with_ymd_and_hms(2026, 2, 23, 8, 0, 0).unwrap();
 
-        assert_eq!(schedule.get_target_temp(date), Some(20.0));
+        assert_eq!(schedule.get_preset(date), Some(PresetName::Home));
 
         date = tick(date);
 
-        assert_eq!(schedule.get_target_temp(date), None);
+        assert_eq!(schedule.get_preset(date), None);
 
         let date = Local.with_ymd_and_hms(2026, 2, 23, 10, 0, 0).unwrap();
-        assert_eq!(schedule.get_target_temp(date), Some(16.0));
+        assert_eq!(schedule.get_preset(date), Some(PresetName::Sleep));
     }
 
     #[test]
@@ -140,7 +145,7 @@ mod tests {
 
         let mut date = Local.with_ymd_and_hms(2026, 2, 23, 7, 59, 59).unwrap();
 
-        assert_eq!(schedule.get_target_temp(date), None);
+        assert_eq!(schedule.get_preset(date), None);
 
         // clock reaches next set point
         date = tick(date);
@@ -148,6 +153,6 @@ mod tests {
         // next tick advances one sec past set point
         date = tick(date);
 
-        assert_eq!(schedule.get_target_temp(date), Some(20.0));
+        assert_eq!(schedule.get_preset(date), Some(PresetName::Home));
     }
 }

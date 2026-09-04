@@ -40,14 +40,19 @@ get-toolchain:
 [working-directory: "website"]
 struct-markdown:
     cat content/configuration.tmpl > content/configuration.md
+    cat content/climate.tmpl > content/climate.md
     cat content/theme.tmpl > content/theme.md
 
     # At this time, json output is an unstable feature; requires nightly tools
     cargo +nightly doc --no-deps
 
     cargo run -p docgen ../target/doc/retherm.json \
-       Config AwayConfig BackplateConfig HomeAssistantConfig BacklightConfig ScheduleConfig \
+       Config BackplateOptions HomeAssistantOptions BacklightOptions \
        >>content/configuration.md
+
+    cargo run -p docgen ../target/doc/retherm.json \
+        ClimateSettings AwayMode Preset ScheduleEntry \
+        >>content/climate.md
 
     cargo run -p docgen ../target/doc/retherm.json \
        Theme MainScreenTheme GaugeStyle ModeSelectTheme ListStyle \

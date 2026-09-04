@@ -38,9 +38,11 @@ use anyhow::Result;
 use esphome_api::server::{EncryptedStreamProvider, PlaintextStreamProvider};
 use log::{error, info};
 
-use crate::events::{Event, EventHandler, EventSource};
-use crate::home_assistant::HomeAssistant;
-use crate::screen::{MainScreen, ScreenManager};
+use crate::{
+    events::{Event, EventHandler, EventSource},
+    home_assistant::{HomeAssistant, HvacRequestHandler, thermostat_entity},
+    screen::{MainScreen, ScreenManager}
+};
 
 fn main() -> Result<()> {
     let cli = cli::Cli::load();
@@ -53,11 +55,8 @@ fn main() -> Result<()> {
 
     install_panic_logging();
 
-    let config = if let Some(file_path) = cli.config {
-        config::Config::load(file_path)?
-    } else {
-        config::Config::default()
-    };
+    let storage_dir = cli.storage_dir
+        .unwrap_or(env::default_storage_dir());
 
     let theme = if let Some(file_path) = cli.theme {
         theme::Theme::load(file_path)?
@@ -67,19 +66,22 @@ fn main() -> Result<()> {
 
     let mut event_source = window::new_event_source()?;
 
-    let mut storage = storage::Storage::new(&config)?;
+    let mut storage = storage::Storage::new(storage_dir)?;
     let state = storage.read_state()?;
+    let config = storage.read_config()?;
+    let climate_stettings = storage.read_climate_settings()?;
 
     let mut state_manager = state::StateManager::new(
         &config,
+        &climate_stettings,
         state.clone(),
         event_source.event_sender()
     )?;
 
-    let mut schedule = schedule::ScheduleManager::new(&config, event_source.event_sender());
-    schedule.start_schedule(&state.mode);
+    let mut schedule = schedule::ScheduleManager::new(event_source.event_sender());
+    schedule.start_schedule(&climate_stettings.schedule);
 
-    let mut backplate = backplate::Backplate::new(&config, event_source.event_sender())?;
+    let mut backplate = backplate::Backplate::new(&config.backplate, event_source.event_sender())?;
     let mut timers = timer::Timers::new(event_source.event_sender());
     let mut sound = sound::Sound::new()?;
 
@@ -91,6 +93,11 @@ fn main() -> Result<()> {
     input_events::start_threads(&event_source)?;
 
     let mut home_assistant = HomeAssistant::new();
+    let hass_delegate = HvacRequestHandler::new(
+        thermostat_entity(config.home_assistant.get_object_id(), &climate_stettings.preset_names()),
+        event_source.event_sender()
+    );
+
     if let Some(key) = &config.home_assistant.encryption_key {
         let stream_factory = EncryptedStreamProvider::new(
             key,
@@ -101,13 +108,13 @@ fn main() -> Result<()> {
         home_assistant.start_listener(
             &config.home_assistant,
             stream_factory,
-            event_source.event_sender()
+            hass_delegate
         );
     } else {
         home_assistant.start_listener(
             &config.home_assistant,
             PlaintextStreamProvider::new(),
-            event_source.event_sender()
+            hass_delegate
         );
     }
 

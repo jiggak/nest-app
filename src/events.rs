@@ -26,7 +26,12 @@ use anyhow::Result;
 use debounce::EventDebouncer;
 use throttle::Throttle;
 
-use crate::{screen::ScreenId, state::{HvacMode, ThermostatState}, timer::TimerId};
+use crate::{
+    config::ClimateSettings,
+    screen::ScreenId,
+    state::{HvacMode, PresetName, ThermostatState},
+    timer::TimerId
+};
 
 #[derive(Debug, Clone)]
 pub enum Event {
@@ -36,7 +41,8 @@ pub enum Event {
     SetTargetTemp(f32),
     SetCurrentTemp(f32),
     SetMode(HvacMode),
-    SetAway(bool),
+    SetPreset(Option<PresetName>),
+    SchedulePreset(PresetName),
     State(ThermostatState),
     GetState,
     NavigateTo(ScreenId),
@@ -55,6 +61,7 @@ pub enum Event {
     CancelTimer(TimerId),
     BackplateConnected,
     BackplateDisconnected,
+    SettingsUpdated(ClimateSettings),
 }
 
 impl Event {
@@ -81,7 +88,8 @@ impl PartialEq for Event {
             Self::SetTargetTemp(_) => matches!(other, Self::SetTargetTemp(_)),
             Self::SetCurrentTemp(_) => matches!(other, Self::SetCurrentTemp(_)),
             Self::SetMode(_) => matches!(other, Self::SetMode(_)),
-            Self::SetAway(_) => matches!(other, Self::SetAway(_)),
+            Self::SetPreset(_) => matches!(other, Self::SetPreset(_)),
+            Self::SchedulePreset(_) => matches!(other, Self::SchedulePreset(_)),
             Self::State(_) => matches!(other, Self::State(_)),
             Self::GetState => matches!(other, Self::GetState),
             Self::NavigateTo(_) => matches!(other, Self::NavigateTo(_)),
@@ -96,6 +104,7 @@ impl PartialEq for Event {
             Self::CancelTimer(_) => matches!(other, Self::CancelTimer(_)),
             Self::BackplateConnected => matches!(other, Self::BackplateConnected),
             Self::BackplateDisconnected => matches!(other, Self::BackplateDisconnected),
+            Self::SettingsUpdated(_) => matches!(other, Self::SettingsUpdated(_)),
         }
     }
 

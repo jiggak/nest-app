@@ -27,8 +27,8 @@ pub struct Cli {
     pub syslog: Option<LevelFilter>,
 
     #[argh(option)]
-    /// path to config file
-    pub config: Option<String>,
+    /// path to storage directory (must be writable by retherm)
+    pub storage_dir: Option<String>,
 
     #[argh(option)]
     /// path to theme file

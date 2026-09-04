@@ -18,13 +18,13 @@
 
 use anyhow::Result;
 
-use crate::{config::Config, events::{Event, EventSender}, state::HvacAction};
-use super::BackplateDevice;
+use crate::{events::{Event, EventSender}, state::HvacAction};
+use super::{BackplateDevice, BackplateOptions};
 
 pub struct SimulatedBackplate;
 
 impl BackplateDevice for SimulatedBackplate {
-    fn new<S>(_config: &Config, event_sender: S) -> Result<Self>
+    fn new<S>(_options: &BackplateOptions, event_sender: S) -> Result<Self>
         where S: EventSender + Send + 'static, Self: Sized
     {
         event_sender.send_event(Event::BackplateConnected)?;

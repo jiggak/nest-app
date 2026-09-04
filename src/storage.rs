@@ -23,7 +23,7 @@ use log::{info, warn};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 use crate::{
-    config::Config,
+    config::{ClimateSettings, Config},
     env,
     events::{Event, EventHandler},
     state::{HvacMode, ThermostatState}
@@ -35,11 +35,13 @@ pub struct Storage {
 }
 
 impl Storage {
-    pub fn new(config: &Config) -> Result<Self> {
-        if !config.storage_dir.is_dir() {
-            Err(anyhow!("Directory {:?} does not exist", config.storage_dir))
+    pub fn new<P: AsRef<Path>>(storage_dir: P) -> Result<Self> {
+        let storage_dir = storage_dir.as_ref();
+
+        if !storage_dir.is_dir() {
+            Err(anyhow!("Directory {:?} does not exist", storage_dir))
         } else {
-            let backend = StorageBackend::new(config.storage_dir.clone());
+            let backend = StorageBackend::new(storage_dir.to_path_buf());
             let write_thread = start_write_thread(backend.clone());
             Ok(Self {
                 backend, write_thread
@@ -59,6 +61,18 @@ impl Storage {
 
         Ok(state)
     }
+
+    pub fn read_config(&self) -> Result<Config> {
+        let config = self.backend.read(env::config_file_name())?
+            .unwrap_or_default();
+        Ok(config)
+    }
+
+    pub fn read_climate_settings(&self) -> Result<ClimateSettings> {
+        let settings = self.backend.read(env::climate_file_name())?
+            .unwrap_or_default();
+        Ok(settings)
+    }
 }
 
 fn start_write_thread(backend: StorageBackend) -> Sender<Storable> {
@@ -70,6 +84,9 @@ fn start_write_thread(backend: StorageBackend) -> Sender<Storable> {
                 Storable::State(state) => {
                     let state = StoredState::from(&state);
                     backend.write(env::state_file_name(), state).unwrap();
+                }
+                Storable::Settings(settings) => {
+                    backend.write(env::climate_file_name(), settings).unwrap();
                 }
             }
         }
@@ -124,7 +141,8 @@ impl From<&StoredState> for ThermostatState {
 }
 
 enum Storable {
-    State(ThermostatState)
+    State(ThermostatState),
+    Settings(ClimateSettings),
 }
 
 #[derive(Clone)]

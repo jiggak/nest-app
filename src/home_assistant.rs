@@ -28,10 +28,12 @@ use esphome_api::{
 };
 
 use crate::{
-    config::HomeAssistantConfig,
     events::{Event, EventHandler, EventSender},
-    state::ThermostatState
+    state::{PresetName, ThermostatState}
 };
+
+mod home_assistant_options;
+pub use home_assistant_options::HomeAssistantOptions;
 
 pub struct HomeAssistant {
     message_sender: MessageSender
@@ -46,29 +48,24 @@ impl HomeAssistant {
 
     pub fn start_listener<S>(
         &self,
-        config: &HomeAssistantConfig,
+        options: &HomeAssistantOptions,
         stream_provider: impl MessageStreamProvider<S> + Send + 'static,
-        event_sender: impl EventSender + Send + 'static
+        delegate: HvacRequestHandler<impl EventSender + Send + 'static>
     )
         where S: MessageStream + Send + 'static
     {
-        let addr = config.listen_addr.clone();
+        let addr = options.listen_addr.clone();
 
         let connection_observer = self.message_sender.clone();
 
-        let delegate = HvacRequestHandler::new(
-            thermostat_entity(config.get_object_id()),
-            event_sender
-        );
-
         let handler = DefaultHandler {
             delegate: delegate,
-            server_info: config.server_info.clone(),
-            node_name: config.get_node_name(),
-            friendly_name: config.friendly_name.clone(),
-            manufacturer: config.manufacturer.clone(),
-            model: config.model.clone(),
-            mac_address: config.get_mac_address()
+            server_info: options.server_info.clone(),
+            node_name: options.get_node_name(),
+            friendly_name: options.friendly_name.clone(),
+            manufacturer: options.manufacturer.clone(),
+            model: options.model.clone(),
+            mac_address: options.get_mac_address()
         };
 
         thread::spawn(move || {
@@ -107,13 +104,13 @@ impl EventHandler for HomeAssistant {
     }
 }
 
-struct HvacRequestHandler<S> {
+pub struct HvacRequestHandler<S> {
     thermostat_entity: ListEntitiesClimateResponse,
     event_sender: S
 }
 
 impl<S: EventSender> HvacRequestHandler<S> {
-    fn new(thermostat_entity: ListEntitiesClimateResponse, event_sender: S) -> Self {
+    pub fn new(thermostat_entity: ListEntitiesClimateResponse, event_sender: S) -> Self {
         Self {
             thermostat_entity,
             event_sender
@@ -148,14 +145,11 @@ impl<S: EventSender> RequestHandler for HvacRequestHandler<S> {
                     self.event_sender.send_event(Event::SetTargetTemp(temp))?;
                 }
                 if cmd.has_preset {
-                    match cmd.preset() {
-                        ClimatePreset::Away => {
-                            self.event_sender.send_event(Event::SetAway(true))?;
-                        }
-                        _ => {
-                            self.event_sender.send_event(Event::SetAway(false))?;
-                        }
-                    }
+                    let mode = cmd.preset().try_into()
+                        .map(|p| Some(p))
+                        .unwrap_or(None);
+
+                    self.event_sender.send_event(Event::SetPreset(mode))?;
                 }
             }
             _ => { }
@@ -165,7 +159,7 @@ impl<S: EventSender> RequestHandler for HvacRequestHandler<S> {
     }
 }
 
-fn thermostat_entity(object_id: String) -> ListEntitiesClimateResponse {
+pub fn thermostat_entity(object_id: String, presets: &[PresetName]) -> ListEntitiesClimateResponse {
     let mut entity = ListEntitiesClimateResponse::default();
 
     entity.object_id = object_id;
@@ -182,10 +176,13 @@ fn thermostat_entity(object_id: String) -> ListEntitiesClimateResponse {
     entity.feature_flags =
         ClimateFeature::SUPPORTS_CURRENT_TEMPERATURE |
         ClimateFeature::SUPPORTS_ACTION;
-    entity.supported_presets = vec![
-        ClimatePreset::None as i32,
-        ClimatePreset::Away as i32,
-    ];
+
+    // Always include "None" which means `None` variant of `Option<Preset>`
+    entity.push_supported_presets(ClimatePreset::None);
+    for preset in presets {
+        let preset: ClimatePreset = (*preset).into();
+        entity.push_supported_presets(preset);
+    }
 
     entity
 }
