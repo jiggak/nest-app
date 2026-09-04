@@ -27,9 +27,9 @@ use debounce::EventDebouncer;
 use throttle::Throttle;
 
 use crate::{
-    state::PresetName,
+    config::ClimateSettings,
     screen::ScreenId,
-    state::{HvacMode, ThermostatState},
+    state::{HvacMode, PresetName, ThermostatState},
     timer::TimerId
 };
 
@@ -61,6 +61,7 @@ pub enum Event {
     CancelTimer(TimerId),
     BackplateConnected,
     BackplateDisconnected,
+    SettingsUpdated(ClimateSettings),
 }
 
 impl Event {
@@ -103,6 +104,7 @@ impl PartialEq for Event {
             Self::CancelTimer(_) => matches!(other, Self::CancelTimer(_)),
             Self::BackplateConnected => matches!(other, Self::BackplateConnected),
             Self::BackplateDisconnected => matches!(other, Self::BackplateDisconnected),
+            Self::SettingsUpdated(_) => matches!(other, Self::SettingsUpdated(_)),
         }
     }
 

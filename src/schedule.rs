@@ -61,11 +61,11 @@ impl<S: EventSender + Clone + Send + 'static> ScheduleManager<S> {
 }
 
 impl<S: EventSender + Clone + Send + 'static> EventHandler for ScheduleManager<S> {
-    fn handle_event(&mut self, _event: &Event) -> Result<()> {
-        // TODO reload schedule when climate settings changed
-        // if let Event::SetMode(mode) = event {
-        //     self.start_schedule(mode);
-        // }
+    fn handle_event(&mut self, event: &Event) -> Result<()> {
+        if let Event::SettingsUpdated(settings) = event {
+            self.start_schedule(&settings.schedule);
+        }
+
         Ok(())
     }
 }
